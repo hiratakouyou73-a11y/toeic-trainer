@@ -34,7 +34,7 @@
       return true;
     } catch (e) {
       console.error("Storage write error for key: " + key, e);
-      alert("端末の保存容量不足等のため、記録の保存に失敗しました。");
+      alert("端末の保存容量不足等のため、データの保存に失敗しました。");
       return false;
     }
   }
@@ -45,6 +45,26 @@
     const m = String(now.getMonth() + 1).padStart(2, "0");
     const d = String(now.getDate()).padStart(2, "0");
     return `${y}-${m}-${d}`;
+  }
+
+  function getSettings() {
+    const def = {
+      schemaVersion: SCHEMA_VERSION,
+      selectedDeckId: "sample",
+      selectedMode: "smart",
+      selectedCount: 10,
+      autoSpeak: true,
+      speechRate: 1.0
+    };
+    const s = loadJSON(STORAGE_KEYS.SETTINGS, def);
+    return Object.assign({}, def, s);
+  }
+
+  function saveSettings(partial) {
+    const current = getSettings();
+    const updated = Object.assign({}, current, partial, { schemaVersion: SCHEMA_VERSION });
+    saveJSON(STORAGE_KEYS.SETTINGS, updated);
+    return updated;
   }
 
   function getProgress() {
@@ -63,7 +83,6 @@
     const p = getProgress();
     const today = getTodayString();
 
-    // 1. 単語ごと
     if (!p.words[wordId]) {
       p.words[wordId] = { correct: 0, wrong: 0, streak: 0, lastAt: today };
     }
@@ -74,10 +93,9 @@
       w.streak += 1;
     } else {
       w.wrong += 1;
-      w.streak = 0; // 不正解またはわからないでリセット
+      w.streak = 0;
     }
 
-    // 2. 日ごと
     if (!p.days[today]) {
       p.days[today] = { answered: 0, correct: 0 };
     }
@@ -89,17 +107,12 @@
     saveJSON(STORAGE_KEYS.PROGRESS, p);
   }
 
-  // 連続学習日数（ストリーク）の計算
   function calculateStreak(daysObj) {
     if (!daysObj) return 0;
-    const todayStr = getTodayString();
-    
-    // 今日回答があるか、もしくは昨日回答があるかを起点とする
     let d = new Date();
     let currStr = getTodayString();
     let streak = 0;
 
-    // 今日解いていなければ、昨日から連続しているかチェック
     if (!daysObj[currStr] || daysObj[currStr].answered === 0) {
       d.setDate(d.getDate() - 1);
       const y = d.getFullYear();
@@ -107,11 +120,10 @@
       const day = String(d.getDate()).padStart(2, "0");
       currStr = `${y}-${m}-${day}`;
       if (!daysObj[currStr] || daysObj[currStr].answered === 0) {
-        return 0; // 今日も昨日も解いていなければ 0日
+        return 0;
       }
     }
 
-    // 過去に遡って数える
     while (true) {
       const y = d.getFullYear();
       const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -156,15 +168,233 @@
   }
 
   // ==========================================
-  // 4. データ管理 & 出題ロジック
+  // 4. 教材データ管理 & CSVパーサー (Phase 5)
   // ==========================================
-  function getDeckWords() {
-    if (Array.isArray(window.SAMPLE_WORDS)) {
-      return window.SAMPLE_WORDS;
-    }
-    return [];
+  function getCustomDecks() {
+    const def = {
+      schemaVersion: SCHEMA_VERSION,
+      decks: {} // deckId: { id, name, updatedAt, words: [...] }
+    };
+    const data = loadJSON(STORAGE_KEYS.DECKS, def);
+    if (!data || typeof data.decks !== "object") return def;
+    return data;
   }
 
+  function saveCustomDeck(deckObj) {
+    const store = getCustomDecks();
+    store.decks[deckObj.id] = deckObj;
+    return saveJSON(STORAGE_KEYS.DECKS, store);
+  }
+
+  function deleteCustomDeck(deckId) {
+    const store = getCustomDecks();
+    if (store.decks[deckId]) {
+      delete store.decks[deckId];
+      saveJSON(STORAGE_KEYS.DECKS, store);
+    }
+  }
+
+  function getAllDeckList() {
+    const sampleWords = Array.isArray(window.SAMPLE_WORDS) ? window.SAMPLE_WORDS : [];
+    const list = [
+      {
+        id: "sample",
+        name: "基礎サンプル",
+        isBuiltIn: true,
+        words: sampleWords
+      }
+    ];
+    const customStore = getCustomDecks();
+    Object.keys(customStore.decks).forEach(key => {
+      const d = customStore.decks[key];
+      if (d && Array.isArray(d.words)) {
+        list.push({
+          id: d.id,
+          name: d.name,
+          isBuiltIn: false,
+          updatedAt: d.updatedAt,
+          words: d.words
+        });
+      }
+    });
+    return list;
+  }
+
+  function getActiveDeck() {
+    const list = getAllDeckList();
+    const found = list.find(d => d.id === state.selectedDeckId);
+    if (found) return found;
+    state.selectedDeckId = "sample";
+    saveSettings({ selectedDeckId: "sample" });
+    return list[0];
+  }
+
+  function getDeckWords() {
+    const deck = getActiveDeck();
+    return deck ? deck.words : [];
+  }
+
+  // ArrayBufferからUTF-8優先・Shift_JISフォールバックで文字列にデコード
+  function decodeCSVBuffer(buffer) {
+    const bytes = new Uint8Array(buffer);
+    // UTF-8 BOM (EF BB BF) チェック
+    if (bytes.length >= 3 && bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) {
+      return new TextDecoder("utf-8").decode(bytes.subarray(3));
+    }
+    try {
+      const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
+      return utf8Decoder.decode(bytes);
+    } catch (e) {
+      // Excelで保存されたShift_JIS（CP932）としてデコード
+      const sjisDecoder = new TextDecoder("shift-jis");
+      return sjisDecoder.decode(bytes);
+    }
+  }
+
+  // RFC4180準拠のCSV行分割（ダブルクォート内のカンマ・改行・エスケープ対応）
+  function parseCSVRows(text) {
+    const rows = [];
+    let currentRow = [];
+    let currentField = "";
+    let inQuotes = false;
+
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      const next = text[i + 1];
+
+      if (inQuotes) {
+        if (ch === '"' && next === '"') {
+          currentField += '"';
+          i++;
+        } else if (ch === '"') {
+          inQuotes = false;
+        } else {
+          currentField += ch;
+        }
+      } else {
+        if (ch === '"') {
+          inQuotes = true;
+        } else if (ch === ",") {
+          currentRow.push(currentField.trim());
+          currentField = "";
+        } else if (ch === "\r" && next === "\n") {
+          currentRow.push(currentField.trim());
+          rows.push(currentRow);
+          currentRow = [];
+          currentField = "";
+          i++;
+        } else if (ch === "\n" || ch === "\r") {
+          currentRow.push(currentField.trim());
+          rows.push(currentRow);
+          currentRow = [];
+          currentField = "";
+        } else {
+          currentField += ch;
+        }
+      }
+    }
+
+    if (currentField.length > 0 || currentRow.length > 0) {
+      currentRow.push(currentField.trim());
+      rows.push(currentRow);
+    }
+
+    return rows;
+  }
+
+  // CSVテキストを検証し、単語リストとスキップ内訳を返す
+  function parseAndValidateWordsCSV(csvText) {
+    const rows = parseCSVRows(csvText);
+    if (rows.length < 2) {
+      return { ok: false, error: "CSVに見出し行またはデータ行がありません。" };
+    }
+
+    const header = rows[0].map(h => h.replace(/^\uFEFF/, "").trim().toLowerCase());
+    const idxId = header.indexOf("id");
+    const idxWord = header.indexOf("word");
+    const idxMeaning = header.indexOf("meaning");
+    const idxPos = header.indexOf("pos");
+    const idxPhrase = header.indexOf("phrase");
+    const idxPhraseJa = header.indexOf("phrase_ja");
+    const idxChecked = header.indexOf("checked");
+
+    if (idxId === -1 || idxWord === -1 || idxMeaning === -1) {
+      return {
+        ok: false,
+        error: "必須の見出し列（id, word, meaning）が見つかりません。\n1行目に id,word,meaning,... があるか確認してください。"
+      };
+    }
+
+    const words = [];
+    const seenIds = new Set();
+    const errors = [];
+    let uncheckedSkipped = 0;
+
+    for (let r = 1; r < rows.length; r++) {
+      const row = rows[r];
+      const lineNum = r + 1;
+
+      // 完全な空行は無視
+      if (row.length === 1 && row[0] === "") continue;
+
+      // checked列が存在する場合、値が "1" 以外はスキップ（OCR下書き用）
+      if (idxChecked !== -1) {
+        const checkedVal = (row[idxChecked] || "").trim();
+        if (checkedVal !== "1") {
+          uncheckedSkipped += 1;
+          continue;
+        }
+      }
+
+      const id = (row[idxId] || "").trim();
+      const word = (row[idxWord] || "").trim();
+      const meaning = (row[idxMeaning] || "").trim();
+
+      if (!id || !word || !meaning) {
+        const missing = [];
+        if (!id) missing.push("id");
+        if (!word) missing.push("word");
+        if (!meaning) missing.push("meaning");
+        errors.push(`${lineNum}行目: ${missing.join("・")} が空です`);
+        continue;
+      }
+
+      if (seenIds.has(id)) {
+        errors.push(`${lineNum}行目: id「${id}」が重複しているためスキップしました`);
+        continue;
+      }
+
+      seenIds.add(id);
+      words.push({
+        id: id,
+        word: word,
+        meaning: meaning,
+        pos: idxPos !== -1 ? (row[idxPos] || "").trim() : "",
+        phrase: idxPhrase !== -1 ? (row[idxPhrase] || "").trim() : "",
+        phrase_ja: idxPhraseJa !== -1 ? (row[idxPhraseJa] || "").trim() : ""
+      });
+    }
+
+    if (words.length < 4) {
+      return {
+        ok: false,
+        error: `有効な単語が ${words.length} 語しかありません（4択を作るため最低4語必要です）。\n` +
+          (uncheckedSkipped > 0 ? `※checked列が「1」でない行が ${uncheckedSkipped} 件スキップされました。\n` : "") +
+          (errors.slice(0, 5).join("\n"))
+      };
+    }
+
+    return {
+      ok: true,
+      words: words,
+      errors: errors,
+      uncheckedSkipped: uncheckedSkipped
+    };
+  }
+
+  // ==========================================
+  // 5. 出題・シャッフルロジック
+  // ==========================================
   function shuffleArray(array) {
     const arr = array.slice();
     for (let i = arr.length - 1; i > 0; i--) {
@@ -176,7 +406,6 @@
     return arr;
   }
 
-  // 1問分の4択（正解1＋誤答3）を生成
   function buildChoices(targetWord, allWords) {
     const candidates = allWords.filter(function (w) {
       return w.id !== targetWord.id && w.meaning !== targetWord.meaning;
@@ -209,8 +438,6 @@
     return shuffleArray([targetWord].concat(distractors));
   }
 
-  // 出題モードに応じた単語選定
-  // mode: 'smart' (おまかせ), 'random' (ランダム), 'weak' (苦手だけ)
   function selectQuestions(allWords, mode, count) {
     if (allWords.length === 0) return [];
     const p = getProgress();
@@ -219,11 +446,10 @@
       return shuffleArray(allWords).slice(0, Math.min(count, allWords.length));
     }
 
-    // 単語を習熟度別に分類
-    const weakList = [];       // streak === 0 かつ 回答履歴あり
-    const unlearnedList = [];  // 回答履歴なし
-    const learningList = [];   // streak 1-2
-    const masteredList = [];   // streak >= 3
+    const weakList = [];
+    const unlearnedList = [];
+    const learningList = [];
+    const masteredList = [];
 
     allWords.forEach(w => {
       const r = p.words[w.id];
@@ -239,28 +465,25 @@
     });
 
     if (mode === "weak") {
-      if (weakList.length === 0) {
-        return []; // 苦手単語なし
-      }
+      if (weakList.length === 0) return [];
       return shuffleArray(weakList).slice(0, Math.min(count, weakList.length));
     }
 
-    // おまかせモード (smart)
-    // 1. 苦手 (最大40%)
-    // 2. 未学習 (最大40%)
-    // 3. 学習中 (残り枠)
-    // 4. 足りなければ 覚えた から補填
+    // おまかせモード (smart): 古く間違えた順・古い回答順を考慮
+    weakList.sort((a, b) => (p.words[a.id]?.lastAt || "").localeCompare(p.words[b.id]?.lastAt || ""));
+    learningList.sort((a, b) => (p.words[a.id]?.lastAt || "").localeCompare(p.words[b.id]?.lastAt || ""));
+    masteredList.sort((a, b) => (p.words[a.id]?.lastAt || "").localeCompare(p.words[b.id]?.lastAt || ""));
+
     const targetWeakCount = Math.floor(count * 0.4);
     const targetUnlearnedCount = Math.floor(count * 0.4);
 
     const picked = [];
     const usedIds = new Set();
 
-    function addFromPool(pool, maxNeeded) {
-      const shuffled = shuffleArray(pool);
-      for (const item of shuffled) {
-        if (picked.length >= count) break;
-        if (maxNeeded > 0 && !usedIds.has(item.id)) {
+    function addOrderedFromPool(pool, maxNeeded) {
+      for (const item of pool) {
+        if (picked.length >= count || maxNeeded <= 0) break;
+        if (!usedIds.has(item.id)) {
           picked.push(item);
           usedIds.add(item.id);
           maxNeeded--;
@@ -268,32 +491,22 @@
       }
     }
 
-    // 1. 苦手
-    addFromPool(weakList, targetWeakCount);
-    // 2. 未学習 (本の番号順を維持しつつ)
-    const neededUnlearned = Math.min(targetUnlearnedCount, count - picked.length);
-    for (const item of unlearnedList) {
-      if (picked.length >= count) break;
-      if (!usedIds.has(item.id)) {
-        picked.push(item);
-        usedIds.add(item.id);
-        if (picked.length >= targetWeakCount + neededUnlearned) break;
-      }
-    }
-    // 3. 学習中
-    addFromPool(learningList, count - picked.length);
-    // 4. それでも足りなければ未学習の残り
-    addFromPool(unlearnedList, count - picked.length);
-    // 5. それでも足りなければ覚えた
-    addFromPool(masteredList, count - picked.length);
-    // 6. 最終防衛線: 全単語から補填
-    addFromPool(allWords, count - picked.length);
+    // 1. 苦手（最大40%）
+    addOrderedFromPool(weakList, targetWeakCount);
+    // 2. 未学習（最大40%・本の番号順）
+    addOrderedFromPool(unlearnedList, targetUnlearnedCount);
+    // 3. 学習中（残り枠）
+    addOrderedFromPool(learningList, count - picked.length);
+    // 4. まだ枠があれば苦手・未学習・覚えたから順次補填
+    addOrderedFromPool(weakList, count - picked.length);
+    addOrderedFromPool(unlearnedList, count - picked.length);
+    addOrderedFromPool(masteredList, count - picked.length);
 
     return shuffleArray(picked);
   }
 
   // ==========================================
-  // 5. 音声再生 (Web Speech API)
+  // 6. 音声再生 (Web Speech API)
   // ==========================================
   const speechSupported =
     typeof window !== "undefined" &&
@@ -330,6 +543,7 @@
       window.speechSynthesis.cancel();
       const utter = new SpeechSynthesisUtterance(text);
       utter.lang = "en-US";
+      utter.rate = state.speechRate || 1.0;
       if (!cachedEnglishVoice) loadEnglishVoice();
       if (cachedEnglishVoice) utter.voice = cachedEnglishVoice;
       window.speechSynthesis.speak(utter);
@@ -337,11 +551,15 @@
   }
 
   // ==========================================
-  // 6. アプリ状態管理
+  // 7. アプリ状態管理
   // ==========================================
+  const initialSettings = getSettings();
   const state = {
-    selectedCount: 10,
-    selectedMode: "smart", // 'smart' | 'random' | 'weak'
+    selectedDeckId: initialSettings.selectedDeckId || "sample",
+    selectedCount: initialSettings.selectedCount || 10,
+    selectedMode: initialSettings.selectedMode || "smart",
+    autoSpeak: initialSettings.autoSpeak !== false,
+    speechRate: initialSettings.speechRate || 1.0,
     allWords: [],
     questions: [],
     currentIndex: 0,
@@ -360,7 +578,7 @@
   }
 
   // ==========================================
-  // 7. DOM要素
+  // 8. DOM要素
   // ==========================================
   const screens = {
     home: document.getElementById("screen-home"),
@@ -379,7 +597,7 @@
     streakBadge: document.getElementById("streak-badge"),
     todayCount: document.getElementById("today-count"),
     todayRate: document.getElementById("today-rate"),
-    deckInfo: document.getElementById("deck-info"),
+    deckSelect: document.getElementById("deck-select"),
     modeBtns: document.querySelectorAll(".mode-btn"),
     countBtns: document.querySelectorAll(".count-btn"),
     homeError: document.getElementById("home-error"),
@@ -431,6 +649,12 @@
 
     // 設定画面
     btnSettingsBack: document.getElementById("btn-settings-back"),
+    csvDeckName: document.getElementById("csv-deck-name"),
+    importCsvInput: document.getElementById("import-csv-input"),
+    csvImportReport: document.getElementById("csv-import-report"),
+    settingsDeckList: document.getElementById("settings-deck-list"),
+    btnToggleAutospeak: document.getElementById("btn-toggle-autospeak"),
+    speedBtns: document.querySelectorAll(".speed-btn"),
     settingsLastBackup: document.getElementById("settings-last-backup"),
     btnExportBackup: document.getElementById("btn-export-backup"),
     importBackupInput: document.getElementById("import-backup-input"),
@@ -474,9 +698,32 @@
   }
 
   // ==========================================
-  // 8. ホーム画面の更新 & バックアップ警告
+  // 9. ホーム画面の更新 & 教材セレクトボックス
   // ==========================================
+  function populateDeckSelect() {
+    const decks = getAllDeckList();
+    // 現在のselectedDeckIdが存在しなければsampleに戻す
+    if (!decks.some(d => d.id === state.selectedDeckId)) {
+      state.selectedDeckId = "sample";
+      saveSettings({ selectedDeckId: "sample" });
+    }
+
+    els.deckSelect.textContent = "";
+    decks.forEach(d => {
+      const opt = document.createElement("option");
+      opt.value = d.id;
+      opt.textContent = `${d.name}（${d.words.length}語）`;
+      if (d.id === state.selectedDeckId) {
+        opt.selected = true;
+      }
+      els.deckSelect.appendChild(opt);
+    });
+  }
+
   function refreshHomeScreen() {
+    populateDeckSelect();
+    els.homeError.classList.add("hidden");
+
     const p = getProgress();
     const today = getTodayString();
     const todayData = p.days[today] || { answered: 0, correct: 0 };
@@ -492,9 +739,17 @@
     const streak = calculateStreak(p.days);
     els.streakBadge.textContent = `🔥 ${streak}日連続`;
 
+    // モード・出題数ボタンのアクティブ状態を反映
+    els.modeBtns.forEach(b => {
+      b.classList.toggle("active", b.getAttribute("data-mode") === state.selectedMode);
+    });
+    els.countBtns.forEach(b => {
+      b.classList.toggle("active", parseInt(b.getAttribute("data-count"), 10) === state.selectedCount);
+    });
+
     // バックアップ警告チェック
     const meta = loadJSON(STORAGE_KEYS.META, {});
-    const lastBackup = meta.lastBackupDate; // "YYYY-MM-DD"
+    const lastBackup = meta.lastBackupDate;
     let totalAnswered = 0;
     Object.values(p.days).forEach(d => totalAnswered += (d.answered || 0));
 
@@ -518,7 +773,7 @@
   }
 
   // ==========================================
-  // 9. クイズ進行処理
+  // 10. クイズ進行処理
   // ==========================================
   function startQuiz(customPool) {
     const allWords = getDeckWords();
@@ -539,7 +794,7 @@
 
     if (questions.length === 0) {
       if (state.selectedMode === "weak") {
-        els.homeError.textContent = "現在、苦手な単語はありません！";
+        els.homeError.textContent = "現在、この教材に苦手な単語はありません！";
       } else {
         els.homeError.textContent = "出題可能な単語がありません。";
       }
@@ -589,7 +844,9 @@
     els.btnDontKnow.classList.remove("hidden");
     els.btnDontKnow.disabled = false;
 
-    speakEnglish(currentWord.word);
+    if (state.autoSpeak) {
+      speakEnglish(currentWord.word);
+    }
   }
 
   function handleAnswer(selectedIndex) {
@@ -606,10 +863,8 @@
       state.wrongWords.push(currentWord);
     }
 
-    // 1問解くごとに即座にストレージへ永続化（途中で閉じても安心）
     saveWordRecord(currentWord.id, isCorrect);
 
-    // 選択肢の表示切り替え
     els.choiceBtns.forEach((btn, idx) => {
       btn.disabled = true;
       const choice = state.currentChoices[idx];
@@ -626,7 +881,6 @@
 
     els.btnDontKnow.classList.add("hidden");
 
-    // フィードバックパネル
     els.feedbackBadge.textContent = isCorrect ? "⭕ 正解" : "❌ 不正解";
     els.feedbackBadge.className = "feedback-badge " + (isCorrect ? "is-correct" : "is-wrong");
     els.feedbackMeaning.textContent = currentWord.meaning;
@@ -640,7 +894,6 @@
     }
     els.feedbackPanel.classList.remove("hidden");
 
-    // 全自動進行（正解は0.9秒、不正解・わからないは1.8秒で確認後に自動で次へ）
     const delayMs = isCorrect ? 900 : 1800;
     state.autoNextTimer = setTimeout(function () {
       goNextQuestion();
@@ -715,14 +968,13 @@
   }
 
   // ==========================================
-  // 10. 記録画面の描画
+  // 11. 記録画面の描画
   // ==========================================
   function renderStatsScreen() {
     const p = getProgress();
     const allWords = getDeckWords();
     const totalWordsCount = allWords.length || 1;
 
-    // 総合スコア
     const streak = calculateStreak(p.days);
     els.statsStreak.textContent = `${streak}日`;
 
@@ -735,7 +987,6 @@
     els.statsTotalAnswers.textContent = `${totalAns}問`;
     els.statsOverallRate.textContent = totalAns > 0 ? Math.round((totalCor / totalAns) * 100) + "%" : "--%";
 
-    // 習熟度集計
     let weakC = 0, learnC = 0, mastC = 0, unlearnC = 0;
     const weakItems = [];
 
@@ -763,10 +1014,8 @@
     els.mMasteredBar.style.width = ((mastC / totalWordsCount) * 100) + "%";
     els.mUnlearnedBar.style.width = ((unlearnC / totalWordsCount) * 100) + "%";
 
-    // 14日間グラフ
     renderChart(p.days);
 
-    // 苦手単語ワースト一覧 (不正解数降順)
     weakItems.sort((a, b) => b.wrongCount - a.wrongCount);
     els.statsWeakList.textContent = "";
     if (weakItems.length === 0) {
@@ -811,7 +1060,6 @@
 
   function renderChart(daysObj) {
     els.chartContainer.textContent = "";
-    // 直近14日分の日付キーを生成
     const dates = [];
     const now = new Date();
     for (let i = 13; i >= 0; i--) {
@@ -859,9 +1107,65 @@
   }
 
   // ==========================================
-  // 11. 設定画面・バックアップ（エクスポート・インポート）
+  // 12. 設定画面・CSV読み込み・バックアップ
   // ==========================================
   function renderSettingsScreen() {
+    // 1. 教材一覧の描画
+    const decks = getAllDeckList();
+    els.settingsDeckList.textContent = "";
+    decks.forEach(d => {
+      const li = document.createElement("li");
+      li.className = "deck-list-item";
+
+      const info = document.createElement("div");
+      info.className = "deck-item-info";
+
+      const nameSpan = document.createElement("span");
+      nameSpan.className = "deck-item-name";
+      nameSpan.textContent = `${d.name}（${d.words.length}語）`;
+
+      const metaSpan = document.createElement("span");
+      metaSpan.className = "deck-item-meta";
+      metaSpan.textContent = d.isBuiltIn
+        ? "初期内蔵データ"
+        : `ID: ${d.id} / 更新: ${d.updatedAt || "-"}`;
+
+      info.appendChild(nameSpan);
+      info.appendChild(metaSpan);
+      li.appendChild(info);
+
+      if (!d.isBuiltIn) {
+        const delBtn = document.createElement("button");
+        delBtn.type = "button";
+        delBtn.className = "delete-deck-btn";
+        delBtn.textContent = "削除";
+        delBtn.addEventListener("click", () => {
+          if (confirm(`教材「${d.name}」を削除しますか？\n（※単語の学習履歴自体は消えずに保持されます）`)) {
+            deleteCustomDeck(d.id);
+            if (state.selectedDeckId === d.id) {
+              state.selectedDeckId = "sample";
+              saveSettings({ selectedDeckId: "sample" });
+            }
+            renderSettingsScreen();
+          }
+        });
+        li.appendChild(delBtn);
+      }
+
+      els.settingsDeckList.appendChild(li);
+    });
+
+    // 2. 音声設定の反映
+    els.btnToggleAutospeak.classList.toggle("active", state.autoSpeak);
+    els.btnToggleAutospeak.setAttribute("aria-pressed", String(state.autoSpeak));
+    els.btnToggleAutospeak.textContent = state.autoSpeak ? "ON" : "OFF";
+
+    els.speedBtns.forEach(btn => {
+      const rate = parseFloat(btn.getAttribute("data-rate"));
+      btn.classList.toggle("active", Math.abs(rate - state.speechRate) < 0.05);
+    });
+
+    // 3. バックアップ情報の反映
     const meta = loadJSON(STORAGE_KEYS.META, {});
     els.settingsLastBackup.textContent = meta.lastBackupDate
       ? `${meta.lastBackupDate} (${meta.lastBackupTime || ""})`
@@ -869,7 +1173,6 @@
 
     els.settingsPersistStatus.textContent = persistStatus;
 
-    // 元に戻すボタンの表示判定
     const prev = localStorage.getItem(STORAGE_KEYS.PROGRESS_PREV);
     if (prev) {
       els.undoWrap.classList.remove("hidden");
@@ -878,10 +1181,82 @@
     }
   }
 
-  // バックアップ書き出し
+  // CSVファイルの取り込み処理
+  function handleCSVFileImport(file) {
+    if (!file) return;
+    els.csvImportReport.classList.add("hidden");
+    els.csvImportReport.classList.remove("is-error");
+
+    const baseName = file.name.replace(/\.[^/.]+$/, "").trim() || "custom_deck";
+    const deckId = "deck_" + baseName.toLowerCase().replace(/[^a-z0-9_-]/g, "_");
+    const customNameInput = (els.csvDeckName.value || "").trim();
+    const displayName = customNameInput || baseName;
+
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      try {
+        const csvText = decodeCSVBuffer(e.target.result);
+        const result = parseAndValidateWordsCSV(csvText);
+
+        if (!result.ok) {
+          els.csvImportReport.textContent = "【読み込みエラー】\n" + result.error;
+          els.csvImportReport.classList.add("is-error");
+          els.csvImportReport.classList.remove("hidden");
+          return;
+        }
+
+        const existingDecks = getCustomDecks().decks;
+        const isOverwrite = !!existingDecks[deckId];
+
+        let confirmMsg =
+          `教材「${displayName}」として ${result.words.length} 語を読み込みますか？\n` +
+          (isOverwrite ? `※既存の「${existingDecks[deckId].name}」の単語リストを最新内容で上書きします（学習記録は維持されます）。\n` : "");
+
+        if (result.uncheckedSkipped > 0) {
+          confirmMsg += `・未確認スキップ (checked≠1): ${result.uncheckedSkipped}件\n`;
+        }
+        if (result.errors.length > 0) {
+          confirmMsg += `・不備スキップ: ${result.errors.length}件\n`;
+        }
+
+        if (!confirm(confirmMsg)) return;
+
+        const saved = saveCustomDeck({
+          id: deckId,
+          name: displayName,
+          updatedAt: getTodayString(),
+          words: result.words
+        });
+
+        if (saved) {
+          state.selectedDeckId = deckId;
+          saveSettings({ selectedDeckId: deckId });
+          els.csvDeckName.value = "";
+
+          let reportText = `✅ 教材「${displayName}」（${result.words.length}語）を登録し、使用教材に設定しました！`;
+          if (result.uncheckedSkipped > 0) {
+            reportText += `\n・checked列が1以外の行を ${result.uncheckedSkipped} 件スキップしました。`;
+          }
+          if (result.errors.length > 0) {
+            reportText += `\n・不備によりスキップした行（${result.errors.length}件）:\n  ` +
+              result.errors.slice(0, 5).join("\n  ");
+          }
+          els.csvImportReport.textContent = reportText;
+          els.csvImportReport.classList.remove("is-error", "hidden");
+          renderSettingsScreen();
+        }
+      } catch (err) {
+        els.csvImportReport.textContent = "エラー: CSVファイルの読み取りに失敗しました。";
+        els.csvImportReport.classList.add("is-error");
+        els.csvImportReport.classList.remove("hidden");
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
   function exportBackup() {
     const p = getProgress();
-    const settings = loadJSON(STORAGE_KEYS.SETTINGS, {});
+    const settings = getSettings();
     const now = new Date();
     const y = now.getFullYear();
     const m = String(now.getMonth() + 1).padStart(2, "0");
@@ -909,7 +1284,6 @@
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 
-    // メタ情報更新
     const meta = loadJSON(STORAGE_KEYS.META, {});
     meta.lastBackupDate = `${y}-${m}-${d}`;
     meta.lastBackupTime = `${hh}:${mm}`;
@@ -919,7 +1293,6 @@
     alert("バックアップファイルをダウンロードしました。\nファイルはスマホの「ダウンロード」フォルダ等に保存されています。");
   }
 
-  // バックアップ復元
   function importBackup(file) {
     if (!file) return;
     const reader = new FileReader();
@@ -927,7 +1300,6 @@
       try {
         const data = JSON.parse(e.target.result);
 
-        // 整合性チェック
         if (data.app !== "toeic-trainer" || data.type !== "backup") {
           alert("エラー: TOEIC Trainer のバックアップファイルではありません。");
           return;
@@ -948,16 +1320,19 @@
 
         if (!confirm(confirmMsg)) return;
 
-        // 現在のデータを退避
         const currentData = localStorage.getItem(STORAGE_KEYS.PROGRESS);
         if (currentData) {
           localStorage.setItem(STORAGE_KEYS.PROGRESS_PREV, currentData);
         }
 
-        // 復元保存
         saveJSON(STORAGE_KEYS.PROGRESS, data.progress);
         if (data.settings) {
-          saveJSON(STORAGE_KEYS.SETTINGS, data.settings);
+          const merged = saveSettings(data.settings);
+          state.selectedDeckId = merged.selectedDeckId;
+          state.selectedMode = merged.selectedMode;
+          state.selectedCount = merged.selectedCount;
+          state.autoSpeak = merged.autoSpeak !== false;
+          state.speechRate = merged.speechRate || 1.0;
         }
 
         renderSettingsScreen();
@@ -969,7 +1344,6 @@
     reader.readAsText(file);
   }
 
-  // 復元の取り消し（Undo）
   function undoRestore() {
     const prev = localStorage.getItem(STORAGE_KEYS.PROGRESS_PREV);
     if (!prev) return;
@@ -983,12 +1357,9 @@
   }
 
   // ==========================================
-  // 12. イベント登録と初期化
+  // 13. イベント登録と初期化
   // ==========================================
   function init() {
-    const words = getDeckWords();
-    els.deckInfo.textContent = `基礎サンプル（${words.length}語）`;
-
     if (!speechSupported) {
       els.btnSpeakWord.classList.add("hidden");
       els.btnSpeakPhrase.classList.add("hidden");
@@ -1001,11 +1372,20 @@
     els.btnStatsBack.addEventListener("click", () => showScreen("home"));
     els.btnSettingsBack.addEventListener("click", () => showScreen("home"));
 
+    // 教材の選択（ホーム画面）
+    els.deckSelect.addEventListener("change", () => {
+      state.selectedDeckId = els.deckSelect.value;
+      saveSettings({ selectedDeckId: state.selectedDeckId });
+      els.homeError.classList.add("hidden");
+    });
+
     // モード選択
     els.modeBtns.forEach(btn => {
       btn.addEventListener("click", () => {
         state.selectedMode = btn.getAttribute("data-mode");
+        saveSettings({ selectedMode: state.selectedMode });
         els.modeBtns.forEach(b => b.classList.toggle("active", b === btn));
+        els.homeError.classList.add("hidden");
       });
     });
 
@@ -1013,6 +1393,7 @@
     els.countBtns.forEach(btn => {
       btn.addEventListener("click", () => {
         state.selectedCount = parseInt(btn.getAttribute("data-count"), 10);
+        saveSettings({ selectedCount: state.selectedCount });
         els.countBtns.forEach(b => b.classList.toggle("active", b === btn));
       });
     });
@@ -1051,12 +1432,35 @@
     els.btnRetryAll.addEventListener("click", () => startQuiz(null));
     els.btnBackHome.addEventListener("click", () => showScreen("home"));
 
+    // CSV読み込み
+    els.importCsvInput.addEventListener("change", (e) => {
+      if (e.target.files && e.target.files[0]) {
+        handleCSVFileImport(e.target.files[0]);
+        e.target.value = "";
+      }
+    });
+
+    // 音声設定イベント
+    els.btnToggleAutospeak.addEventListener("click", () => {
+      state.autoSpeak = !state.autoSpeak;
+      saveSettings({ autoSpeak: state.autoSpeak });
+      renderSettingsScreen();
+    });
+
+    els.speedBtns.forEach(btn => {
+      btn.addEventListener("click", () => {
+        state.speechRate = parseFloat(btn.getAttribute("data-rate"));
+        saveSettings({ speechRate: state.speechRate });
+        renderSettingsScreen();
+      });
+    });
+
     // バックアップ操作
     els.btnExportBackup.addEventListener("click", exportBackup);
     els.importBackupInput.addEventListener("change", (e) => {
       if (e.target.files && e.target.files[0]) {
         importBackup(e.target.files[0]);
-        e.target.value = ""; // リセット
+        e.target.value = "";
       }
     });
     els.btnUndoRestore.addEventListener("click", undoRestore);

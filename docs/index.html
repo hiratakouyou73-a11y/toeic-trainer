@@ -60,8 +60,10 @@
       <!-- 出題設定カード -->
       <div class="card home-card">
         <div class="setting-row">
-          <span class="setting-label">使用教材</span>
-          <span id="deck-info" class="setting-value">基礎サンプル（30語）</span>
+          <label for="deck-select" class="setting-label">使用教材</label>
+          <select id="deck-select" class="deck-select" aria-label="使用教材の選択">
+            <option value="sample">基礎サンプル（30語）</option>
+          </select>
         </div>
 
         <div class="setting-block">
@@ -252,6 +254,47 @@
       </div>
 
       <div class="sub-screen-content">
+        <!-- 教材CSV管理カード -->
+        <div class="card">
+          <h3 class="card-inner-title">教材データの管理 (CSV読み込み)</h3>
+          <p class="setting-desc">自作またはOCR作成した単語CSVファイルをスマホ内に取り込みます（外部へは一切送信されません）。</p>
+
+          <div class="csv-form-group" style="margin-top:10px;">
+            <label for="csv-deck-name" class="setting-label">教材の表示名（空欄ならファイル名）</label>
+            <input type="text" id="csv-deck-name" class="text-input" placeholder="例: 金のフレーズ 600点">
+          </div>
+
+          <div class="backup-actions">
+            <div class="import-wrap">
+              <label for="import-csv-input" class="primary-btn btn-sm file-label">教材CSVを読み込む (ファイル選択)</label>
+              <input type="file" id="import-csv-input" accept=".csv,text/csv" class="hidden-input">
+            </div>
+          </div>
+
+          <div id="csv-import-report" class="csv-report hidden" role="status"></div>
+
+          <div class="deck-manage-section">
+            <span class="setting-label">登録済みの教材一覧</span>
+            <ul id="settings-deck-list" class="settings-deck-list"></ul>
+          </div>
+        </div>
+
+        <!-- 音声読み上げ設定カード -->
+        <div class="card">
+          <h3 class="card-inner-title">音声読み上げ設定</h3>
+          <div class="setting-row">
+            <span class="setting-label">出題時の自動読み上げ</span>
+            <button type="button" id="btn-toggle-autospeak" class="toggle-btn active" aria-pressed="true">ON</button>
+          </div>
+          <div class="setting-row" style="border-bottom:none; margin-bottom:0; padding-bottom:0;">
+            <span class="setting-label">読み上げ速度</span>
+            <div class="speed-selector" role="group" aria-label="読み上げ速度の選択">
+              <button type="button" class="speed-btn" data-rate="0.8">ゆっくり (0.8x)</button>
+              <button type="button" class="speed-btn active" data-rate="1.0">標準 (1.0x)</button>
+            </div>
+          </div>
+        </div>
+
         <!-- バックアップカード -->
         <div class="card">
           <h3 class="card-inner-title">学習記録のバックアップ</h3>
@@ -293,9 +336,9 @@
           <h3 class="card-inner-title">アプリ情報</h3>
           <div class="setting-row">
             <span class="setting-label">バージョン</span>
-            <span class="setting-value">v4.0 (Phase 4)</span>
+            <span class="setting-value">v5.0 (Phase 5)</span>
           </div>
-          <div class="setting-row">
+          <div class="setting-row" style="border-bottom:none; margin-bottom:0; padding-bottom:0;">
             <span class="setting-label">保存方式</span>
             <span class="setting-value">localStorage (完全ローカル)</span>
           </div>
