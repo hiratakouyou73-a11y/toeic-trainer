@@ -1,0 +1,14 @@
+# 書籍データ・個人データ（念のため。本来はリポジトリの外に置く）
+private/
+*.csv
+*.jpg
+*.jpeg
+*.heic
+*.pdf
+*.png
+!docs/icons/*.png
+toeic-backup-*.json
+
+# Python
+__pycache__/
+.venv/

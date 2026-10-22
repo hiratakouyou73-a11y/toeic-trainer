@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>TOEIC Trainer</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+
+    <!-- ① ホーム画面 -->
+    <section id="screen-home" class="screen active" aria-label="ホーム画面">
+      <header class="home-header">
+        <span class="app-badge">TOEIC L&amp;R 単語トレーニング</span>
+        <h1 class="app-title">TOEIC Trainer</h1>
+        <p class="app-subtitle">テンポよく反復してスコアアップ</p>
+      </header>
+
+      <div class="card home-card">
+        <div class="setting-row">
+          <span class="setting-label">使用教材</span>
+          <span id="deck-info" class="setting-value">基礎サンプル（30語）</span>
+        </div>
+
+        <div class="setting-block">
+          <span class="setting-label">出題数</span>
+          <div class="count-selector" role="group" aria-label="出題数の選択">
+            <button type="button" class="count-btn active" data-count="10">10問</button>
+            <button type="button" class="count-btn" data-count="20">20問</button>
+            <button type="button" class="count-btn" data-count="30">30問</button>
+          </div>
+        </div>
+      </div>
+
+      <p id="home-error" class="error-msg hidden" role="alert"></p>
+
+      <div class="home-actions">
+        <button type="button" id="btn-start" class="primary-btn">スタート</button>
+      </div>
+    </section>
+
+    <!-- ② 問題画面 -->
+    <section id="screen-quiz" class="screen" aria-label="問題画面">
+      <div class="quiz-top">
+        <div class="quiz-nav">
+          <button type="button" id="btn-quit" class="icon-btn" aria-label="中断してホームへ戻る">✕</button>
+          <span id="quiz-progress-text" class="progress-text">1 / 10</span>
+        </div>
+        <div class="progress-bar-bg">
+          <div id="quiz-progress-bar" class="progress-bar-fill"></div>
+        </div>
+
+        <div class="word-area">
+          <div class="word-row">
+            <h2 id="quiz-word" class="quiz-word">confirm</h2>
+            <button type="button" id="btn-speak-word" class="speak-btn" aria-label="英単語の発音を聞く">🔊</button>
+          </div>
+          <span id="quiz-pos" class="pos-badge">動詞</span>
+        </div>
+
+        <!-- 回答後のフィードバック表示領域 -->
+        <div id="feedback-panel" class="feedback-panel hidden" aria-live="polite">
+          <div class="feedback-header">
+            <span id="feedback-badge" class="feedback-badge">⭕ 正解</span>
+            <span id="feedback-meaning" class="feedback-meaning">〜を確認する</span>
+          </div>
+          <div id="feedback-phrase-row" class="feedback-phrase-row">
+            <div class="phrase-texts">
+              <p id="feedback-phrase" class="feedback-phrase">confirm the schedule</p>
+              <p id="feedback-phrase-ja" class="feedback-phrase-ja">日程を確認する</p>
+            </div>
+            <button type="button" id="btn-speak-phrase" class="speak-btn speak-btn-sm" aria-label="フレーズの発音を聞く">🔊</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="quiz-bottom">
+        <div id="choices-container" class="choices-container">
+          <button type="button" class="choice-btn" data-index="0"></button>
+          <button type="button" class="choice-btn" data-index="1"></button>
+          <button type="button" class="choice-btn" data-index="2"></button>
+          <button type="button" class="choice-btn" data-index="3"></button>
+        </div>
+
+        <div class="quiz-footer-action">
+          <button type="button" id="btn-dont-know" class="dont-know-btn">わからない</button>
+          <button type="button" id="btn-next" class="next-btn hidden">次の問題へ →</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ③ 結果画面 -->
+    <section id="screen-result" class="screen" aria-label="結果画面">
+      <header class="result-header">
+        <h2 class="result-title">トレーニング完了！</h2>
+        <div class="score-card">
+          <div class="score-rate-row">
+            <span class="score-label">正答率</span>
+            <span id="result-rate" class="score-rate">80%</span>
+          </div>
+          <p id="result-detail" class="score-detail">10問中 8問正解</p>
+        </div>
+      </header>
+
+      <div class="wrong-section">
+        <h3 id="wrong-list-title" class="section-subtitle">間違えた単語（2語）</h3>
+        <p id="no-wrong-msg" class="no-wrong-msg hidden">🎉 全問正解です！素晴らしい！</p>
+        <ul id="wrong-list" class="wrong-list"></ul>
+      </div>
+
+      <div class="result-actions">
+        <button type="button" id="btn-retry-wrong" class="primary-btn">間違えた単語だけもう一度</button>
+        <div class="result-sub-actions">
+          <button type="button" id="btn-retry-all" class="secondary-btn">もう一度</button>
+          <button type="button" id="btn-back-home" class="secondary-btn">ホームへ</button>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <script src="data/sample_words.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

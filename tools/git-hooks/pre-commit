@@ -1,0 +1,15 @@
+#!/bin/sh
+# 書籍データ・個人用バックアップの誤コミット防止フック
+
+FORBIDDEN=$(git diff --cached --name-only --diff-filter=ACM | grep -E '(^private/|\.csv$|\.pdf$|\.jpe?g$|\.heic$|^toeic-backup-.*\.json$|\.png$)' | grep -v -E '^docs/icons/.*\.png$')
+
+if [ -n "$FORBIDDEN" ]; then
+  echo "========================================================"
+  echo "[ERROR] 公開禁止ファイルがコミット対象に含まれています！"
+  echo "以下のファイルはコミットできません："
+  echo "$FORBIDDEN"
+  echo "========================================================"
+  exit 1
+fi
+
+exit 0
