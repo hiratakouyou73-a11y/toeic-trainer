@@ -173,7 +173,6 @@
 
     choiceBtns: document.querySelectorAll(".choice-btn"),
     btnDontKnow: document.getElementById("btn-dont-know"),
-    btnNext: document.getElementById("btn-next"),
 
     resultRate: document.getElementById("result-rate"),
     resultDetail: document.getElementById("result-detail"),
@@ -275,7 +274,6 @@
     // 下部ボタン切り替え
     els.btnDontKnow.classList.remove("hidden");
     els.btnDontKnow.disabled = false;
-    els.btnNext.classList.add("hidden");
 
     // 出題時の自動読み上げ
     speakEnglish(currentWord.word);
@@ -330,17 +328,12 @@
     }
     els.feedbackPanel.classList.remove("hidden");
 
-    // 次へボタンを表示（正解時もタップで即進めるように表示）
-    const isLast = state.currentIndex + 1 >= state.questions.length;
-    els.btnNext.textContent = isLast ? "結果を見る →" : "次の問題へ →";
-    els.btnNext.classList.remove("hidden");
-
-    // 正解時は約1秒後に自動で次へ進む
-    if (isCorrect) {
-      state.autoNextTimer = setTimeout(function () {
-        goNextQuestion();
-      }, 950);
-    }
+    // 回答後（正解・不正解・わからないすべて）は「次へ」ボタンを押さずに自動で次の問題へ進む
+    // 正解時はテンポ重視で約0.9秒、不正解・わからない時は正解とフレーズを確認できるよう約1.8秒待つ
+    const delayMs = isCorrect ? 900 : 1800;
+    state.autoNextTimer = setTimeout(function () {
+      goNextQuestion();
+    }, delayMs);
   }
 
   function goNextQuestion() {
@@ -453,7 +446,16 @@
 
     els.btnSpeakPhrase.addEventListener("click", function () {
       const currentWord = state.questions[state.currentIndex];
-      if (currentWord && currentWord.phrase) speakEnglish(currentWord.phrase);
+      if (currentWord && currentWord.phrase) {
+        speakEnglish(currentWord.phrase);
+        // フレーズを聞いている最中に画面が切り替わらないよう自動遷移タイマーを延長する
+        if (state.answered) {
+          clearAutoNextTimer();
+          state.autoNextTimer = setTimeout(function () {
+            goNextQuestion();
+          }, 2200);
+        }
+      }
     });
 
     // 4択ボタン
@@ -466,11 +468,6 @@
     // わからないボタン
     els.btnDontKnow.addEventListener("click", function () {
       handleAnswer(null);
-    });
-
-    // 次へボタン
-    els.btnNext.addEventListener("click", function () {
-      goNextQuestion();
     });
 
     // 結果画面のボタン
