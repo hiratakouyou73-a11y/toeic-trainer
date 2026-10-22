@@ -1,4 +1,4 @@
-# 公開前チェックスクリプト（push の前に毎回実行）
+﻿# 公開前チェックスクリプト（push の前に毎回実行）
 # 使い方: powershell -ExecutionPolicy Bypass -File tools/check_publish.ps1
 
 $ErrorActionPreference = "Stop"
