@@ -53,6 +53,11 @@
       selectedDeckId: "sample",
       selectedMode: "smart",
       selectedCount: 10,
+      timeLimit: 5,        // 5s standard (5 / 3 / 0)
+      soundEffect: true,   // Web Audio API
+      vibrate: true,       // Haptic feedback
+      phraseHint: "masked",// "masked" | "full" | "off"
+      theme: "light",      // "light" | "dark"
       autoSpeak: true,
       speechRate: 1.0
     };
@@ -551,6 +556,132 @@
   }
 
   // ==========================================
+  // 6.5 効果音 (Web Audio API シンセサイザー方式 - 外部音声ファイルゼロ)
+  // ==========================================
+  let audioCtx = null;
+
+  function getAudioContext() {
+    if (typeof window === "undefined") return null;
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return null;
+    if (!audioCtx) {
+      try {
+        audioCtx = new AudioContextClass();
+      } catch (e) {
+        return null;
+      }
+    }
+    if (audioCtx && audioCtx.state === "suspended") {
+      audioCtx.resume().catch(() => {});
+    }
+    return audioCtx;
+  }
+
+  function playTone({ frequency, type = "sine", duration = 0.1, startTime = 0, gain = 0.16 }) {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    try {
+      const osc = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+      const now = ctx.currentTime;
+
+      osc.type = type;
+      osc.frequency.setValueAtTime(frequency, now + startTime);
+
+      gainNode.gain.setValueAtTime(gain, now + startTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.0001, now + startTime + duration);
+
+      osc.connect(gainNode);
+      gainNode.connect(ctx.destination);
+
+      osc.start(now + startTime);
+      osc.stop(now + startTime + duration);
+    } catch (e) {
+      console.warn("playTone error", e);
+    }
+  }
+
+  function playCorrectSound(combo = 0) {
+    if (!state.soundEffect) return;
+    try {
+      if (combo >= 5) {
+        // 5コンボ以上の爽快チャイム (ド C5 -> ソ G5 -> 高いド C6)
+        playTone({ frequency: 523, duration: 0.07, startTime: 0, gain: 0.16 });
+        playTone({ frequency: 784, duration: 0.07, startTime: 0.06, gain: 0.18 });
+        playTone({ frequency: 1046, duration: 0.14, startTime: 0.12, gain: 0.22 });
+      } else {
+        // 標準チャイム (ド C5 523Hz -> ミ E5 659Hz)
+        playTone({ frequency: 523, duration: 0.08, startTime: 0, gain: 0.16 });
+        playTone({ frequency: 659, duration: 0.13, startTime: 0.07, gain: 0.2 });
+      }
+    } catch (e) {}
+  }
+
+  function playWrongSound() {
+    if (!state.soundEffect) return;
+    try {
+      // 柔らかいブザー音 (三角波 A3 220Hz -> F3 175Hz)
+      playTone({ frequency: 220, type: "triangle", duration: 0.11, startTime: 0, gain: 0.16 });
+      playTone({ frequency: 175, type: "triangle", duration: 0.18, startTime: 0.09, gain: 0.2 });
+    } catch (e) {}
+  }
+
+  // ==========================================
+  // 6.6 バイブレーション (Navigator.vibrate)
+  // ==========================================
+  function triggerVibrate(pattern) {
+    if (!state.vibrate) return;
+    if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+      try {
+        navigator.vibrate(pattern);
+      } catch (e) {}
+    }
+  }
+
+  // ==========================================
+  // 6.7 フレーズ穴埋め・強調用ヘルパー
+  // ==========================================
+  function escapeRegex(str) {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  function maskWordInPhrase(word, phrase) {
+    if (!phrase) return "";
+    if (!word) return phrase;
+    const trimmed = word.trim();
+    const escaped = escapeRegex(trimmed);
+    try {
+      const reInflect = new RegExp("\\b" + escaped + "(?:s|es|ed|d|ing|er|est)?\\b", "i");
+      if (reInflect.test(phrase)) {
+        return phrase.replace(reInflect, '<span class="masked-blank">______</span>');
+      }
+      const reSimple = new RegExp(escaped, "i");
+      if (reSimple.test(phrase)) {
+        return phrase.replace(reSimple, '<span class="masked-blank">______</span>');
+      }
+    } catch (e) {}
+    return phrase;
+  }
+
+  function highlightWordInPhrase(word, phrase) {
+    if (!phrase) return "";
+    if (!word) return phrase;
+    const trimmed = word.trim();
+    const escaped = escapeRegex(trimmed);
+    try {
+      const reInflect = new RegExp("\\b(" + escaped + "(?:s|es|ed|d|ing|er|est)?)\\b", "i");
+      if (reInflect.test(phrase)) {
+        return phrase.replace(reInflect, '<span class="phrase-target-word">$1</span>');
+      }
+      const reSimple = new RegExp("(" + escaped + ")", "i");
+      if (reSimple.test(phrase)) {
+        return phrase.replace(reSimple, '<span class="phrase-target-word">$1</span>');
+      }
+    } catch (e) {}
+    return phrase;
+  }
+
+  // ==========================================
   // 7. アプリ状態管理
   // ==========================================
   const initialSettings = getSettings();
@@ -558,6 +689,11 @@
     selectedDeckId: initialSettings.selectedDeckId || "sample",
     selectedCount: initialSettings.selectedCount || 10,
     selectedMode: initialSettings.selectedMode || "smart",
+    timeLimit: typeof initialSettings.timeLimit === "number" ? initialSettings.timeLimit : 5,
+    soundEffect: initialSettings.soundEffect !== false,
+    vibrate: initialSettings.vibrate !== false,
+    phraseHint: initialSettings.phraseHint || "masked",
+    theme: initialSettings.theme || "light",
     autoSpeak: initialSettings.autoSpeak !== false,
     speechRate: initialSettings.speechRate || 1.0,
     allWords: [],
@@ -567,13 +703,24 @@
     answered: false,
     correctCount: 0,
     wrongWords: [],
-    autoNextTimer: null
+    autoNextTimer: null,
+    // Phase 7
+    combo: 0,
+    maxCombo: 0,
+    timerId: null
   };
 
   function clearAutoNextTimer() {
     if (state.autoNextTimer !== null) {
       clearTimeout(state.autoNextTimer);
       state.autoNextTimer = null;
+    }
+  }
+
+  function clearCountdownTimer() {
+    if (state.timerId !== null) {
+      cancelAnimationFrame(state.timerId);
+      state.timerId = null;
     }
   }
 
@@ -590,6 +737,7 @@
 
   const els = {
     // ホーム
+    btnToggleTheme: document.getElementById("btn-toggle-theme"),
     btnOpenStats: document.getElementById("btn-open-stats"),
     btnOpenSettings: document.getElementById("btn-open-settings"),
     homeBackupAlert: document.getElementById("home-backup-alert"),
@@ -600,17 +748,25 @@
     deckSelect: document.getElementById("deck-select"),
     modeBtns: document.querySelectorAll(".mode-btn"),
     countBtns: document.querySelectorAll(".count-btn"),
+    timerBtns: document.querySelectorAll(".timer-btn"),
     homeError: document.getElementById("home-error"),
     btnStart: document.getElementById("btn-start"),
 
     // クイズ
     btnQuit: document.getElementById("btn-quit"),
+    quizComboBadge: document.getElementById("quiz-combo-badge"),
     progressText: document.getElementById("quiz-progress-text"),
     progressBar: document.getElementById("quiz-progress-bar"),
+    quizTimerWrap: document.getElementById("quiz-timer-wrap"),
+    quizTimerBar: document.getElementById("quiz-timer-bar"),
     quizWord: document.getElementById("quiz-word"),
     btnSpeakWord: document.getElementById("btn-speak-word"),
     quizPos: document.getElementById("quiz-pos"),
-    feedbackPanel: document.getElementById("feedback-panel"),
+    phraseSlot: document.getElementById("phrase-slot"),
+    phraseQuestionView: document.getElementById("phrase-question-view"),
+    phraseAnswerView: document.getElementById("phrase-answer-view"),
+    phraseSlotLabel: document.querySelector(".phrase-slot-label"),
+    quizMaskedPhrase: document.getElementById("quiz-masked-phrase"),
     feedbackBadge: document.getElementById("feedback-badge"),
     feedbackMeaning: document.getElementById("feedback-meaning"),
     feedbackPhraseRow: document.getElementById("feedback-phrase-row"),
@@ -623,6 +779,7 @@
     // 結果
     resultRate: document.getElementById("result-rate"),
     resultDetail: document.getElementById("result-detail"),
+    resultMaxCombo: document.getElementById("result-max-combo"),
     wrongListTitle: document.getElementById("wrong-list-title"),
     noWrongMsg: document.getElementById("no-wrong-msg"),
     wrongList: document.getElementById("wrong-list"),
@@ -649,6 +806,10 @@
 
     // 設定画面
     btnSettingsBack: document.getElementById("btn-settings-back"),
+    themeBtns: document.querySelectorAll(".theme-btn"),
+    btnToggleSound: document.getElementById("btn-toggle-sound"),
+    btnToggleVibrate: document.getElementById("btn-toggle-vibrate"),
+    hintBtns: document.querySelectorAll(".hint-btn"),
     csvDeckName: document.getElementById("csv-deck-name"),
     importCsvInput: document.getElementById("import-csv-input"),
     csvImportReport: document.getElementById("csv-import-report"),
@@ -663,8 +824,77 @@
     settingsPersistStatus: document.getElementById("settings-persist-status")
   };
 
+  function applyTheme(themeName) {
+    state.theme = themeName;
+    document.documentElement.setAttribute("data-theme", themeName);
+    const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+    if (els.btnToggleTheme) {
+      if (themeName === "dark") {
+        els.btnToggleTheme.textContent = "☀️";
+        els.btnToggleTheme.setAttribute("aria-label", "ライトモードに切替");
+        els.btnToggleTheme.title = "ライトモードに切替";
+        if (metaThemeColor) metaThemeColor.setAttribute("content", "#0f172a");
+      } else {
+        els.btnToggleTheme.textContent = "🌙";
+        els.btnToggleTheme.setAttribute("aria-label", "ダークモードに切替");
+        els.btnToggleTheme.title = "ダークモードに切替";
+        if (metaThemeColor) metaThemeColor.setAttribute("content", "#2563eb");
+      }
+    }
+  }
+
+  function toggleTheme() {
+    const next = state.theme === "dark" ? "light" : "dark";
+    applyTheme(next);
+    saveSettings({ theme: next });
+    renderSettingsScreen();
+  }
+
+  function startCountdownTimer() {
+    clearCountdownTimer();
+    if (!state.timeLimit || state.timeLimit <= 0) {
+      if (els.quizTimerWrap) els.quizTimerWrap.classList.add("hidden");
+      return;
+    }
+    if (els.quizTimerWrap) els.quizTimerWrap.classList.remove("hidden");
+    if (els.quizTimerBar) {
+      els.quizTimerBar.style.width = "100%";
+      els.quizTimerBar.className = "timer-bar-fill";
+    }
+
+    const totalMs = state.timeLimit * 1000;
+    const startMs = performance.now();
+
+    function tick() {
+      if (state.answered) return;
+      const elapsed = performance.now() - startMs;
+      const remaining = Math.max(0, totalMs - elapsed);
+      const ratio = remaining / totalMs;
+
+      if (els.quizTimerBar) {
+        els.quizTimerBar.style.width = (ratio * 100) + "%";
+        if (ratio <= 0.25) {
+          els.quizTimerBar.className = "timer-bar-fill timer-danger";
+        } else if (ratio <= 0.5) {
+          els.quizTimerBar.className = "timer-bar-fill timer-warning";
+        } else {
+          els.quizTimerBar.className = "timer-bar-fill";
+        }
+      }
+
+      if (remaining <= 0) {
+        clearCountdownTimer();
+        handleAnswer(null, { isTimeout: true });
+      } else {
+        state.timerId = requestAnimationFrame(tick);
+      }
+    }
+    state.timerId = requestAnimationFrame(tick);
+  }
+
   function showScreen(screenName) {
     clearAutoNextTimer();
+    clearCountdownTimer();
     stopSpeech();
     Object.keys(screens).forEach(key => {
       if (key === screenName) {
@@ -739,12 +969,15 @@
     const streak = calculateStreak(p.days);
     els.streakBadge.textContent = `🔥 ${streak}日連続`;
 
-    // モード・出題数ボタンのアクティブ状態を反映
+    // モード・出題数・タイマーボタンのアクティブ状態を反映
     els.modeBtns.forEach(b => {
       b.classList.toggle("active", b.getAttribute("data-mode") === state.selectedMode);
     });
     els.countBtns.forEach(b => {
       b.classList.toggle("active", parseInt(b.getAttribute("data-count"), 10) === state.selectedCount);
+    });
+    els.timerBtns.forEach(b => {
+      b.classList.toggle("active", parseInt(b.getAttribute("data-timer"), 10) === state.timeLimit);
     });
 
     // バックアップ警告チェック
@@ -807,6 +1040,8 @@
     state.currentIndex = 0;
     state.correctCount = 0;
     state.wrongWords = [];
+    state.combo = 0;
+    state.maxCombo = 0;
 
     showScreen("quiz");
     renderQuestion();
@@ -814,11 +1049,32 @@
 
   function renderQuestion() {
     clearAutoNextTimer();
+    clearCountdownTimer();
     state.answered = false;
 
     const total = state.questions.length;
     const currentWord = state.questions[state.currentIndex];
     state.currentChoices = buildChoices(currentWord, state.allWords);
+
+    // リセット：シェイクアニメーション
+    els.quizWord.classList.remove("shake");
+    els.choiceBtns.forEach(btn => btn.classList.remove("shake"));
+
+    // コンボバッジの表示制御
+    if (state.combo >= 2) {
+      els.quizComboBadge.textContent = `🔥 ${state.combo} COMBO!`;
+      els.quizComboBadge.classList.remove("hidden");
+      els.quizComboBadge.classList.remove("combo-tier-1", "combo-tier-2", "combo-tier-3");
+      if (state.combo >= 10) {
+        els.quizComboBadge.classList.add("combo-tier-3");
+      } else if (state.combo >= 5) {
+        els.quizComboBadge.classList.add("combo-tier-2");
+      } else {
+        els.quizComboBadge.classList.add("combo-tier-1");
+      }
+    } else {
+      els.quizComboBadge.classList.add("hidden");
+    }
 
     els.progressText.textContent = `${state.currentIndex + 1} / ${total}`;
     const progressPercent = ((state.currentIndex + 1) / total) * 100;
@@ -832,7 +1088,22 @@
       els.quizPos.classList.add("hidden");
     }
 
-    els.feedbackPanel.classList.add("hidden");
+    // 固定スロット：出題時は穴埋めフレーズを表示、回答後パネルは隠す
+    els.phraseQuestionView.classList.remove("hidden");
+    els.phraseAnswerView.classList.add("hidden");
+
+    if (currentWord.phrase && state.phraseHint !== "off") {
+      if (state.phraseHint === "masked") {
+        els.phraseSlotLabel.textContent = "フレーズ穴埋め";
+        els.quizMaskedPhrase.innerHTML = maskWordInPhrase(currentWord.word, currentWord.phrase);
+      } else {
+        els.phraseSlotLabel.textContent = "フレーズヒント";
+        els.quizMaskedPhrase.textContent = currentWord.phrase;
+      }
+    } else {
+      els.phraseSlotLabel.textContent = "出題";
+      els.quizMaskedPhrase.textContent = currentWord.phrase || "4択から正しい意味を選択";
+    }
 
     els.choiceBtns.forEach((btn, idx) => {
       const choice = state.currentChoices[idx];
@@ -844,23 +1115,62 @@
     els.btnDontKnow.classList.remove("hidden");
     els.btnDontKnow.disabled = false;
 
+    // タイマー開始
+    startCountdownTimer();
+
     if (state.autoSpeak) {
       speakEnglish(currentWord.word);
     }
   }
 
-  function handleAnswer(selectedIndex) {
+  function handleAnswer(selectedIndex, options) {
     if (state.answered) return;
     state.answered = true;
+    clearCountdownTimer();
 
+    const isTimeout = !!(options && options.isTimeout);
+    const isDontKnow = selectedIndex === null && !isTimeout;
     const currentWord = state.questions[state.currentIndex];
     const pickedChoice = selectedIndex !== null ? state.currentChoices[selectedIndex] : null;
     const isCorrect = pickedChoice !== null && pickedChoice.id === currentWord.id;
 
     if (isCorrect) {
       state.correctCount += 1;
+      state.combo += 1;
+      if (state.combo > state.maxCombo) {
+        state.maxCombo = state.combo;
+      }
+      playCorrectSound(state.combo);
+      triggerVibrate(15);
+
+      if (state.combo >= 2) {
+        els.quizComboBadge.textContent = `🔥 ${state.combo} COMBO!`;
+        els.quizComboBadge.classList.remove("hidden");
+        els.quizComboBadge.classList.remove("combo-tier-1", "combo-tier-2", "combo-tier-3");
+        if (state.combo >= 10) {
+          els.quizComboBadge.classList.add("combo-tier-3");
+        } else if (state.combo >= 5) {
+          els.quizComboBadge.classList.add("combo-tier-2");
+        } else {
+          els.quizComboBadge.classList.add("combo-tier-1");
+        }
+        els.quizComboBadge.classList.remove("combo-pop");
+        void els.quizComboBadge.offsetWidth;
+        els.quizComboBadge.classList.add("combo-pop");
+      }
     } else {
+      state.combo = 0;
       state.wrongWords.push(currentWord);
+      playWrongSound();
+      triggerVibrate([40, 50, 70]);
+      els.quizComboBadge.classList.add("hidden");
+
+      if (selectedIndex !== null) {
+        const pickedBtn = els.choiceBtns[selectedIndex];
+        if (pickedBtn) pickedBtn.classList.add("shake");
+      } else {
+        els.quizWord.classList.add("shake");
+      }
     }
 
     saveWordRecord(currentWord.id, isCorrect);
@@ -881,18 +1191,33 @@
 
     els.btnDontKnow.classList.add("hidden");
 
-    els.feedbackBadge.textContent = isCorrect ? "⭕ 正解" : "❌ 不正解";
-    els.feedbackBadge.className = "feedback-badge " + (isCorrect ? "is-correct" : "is-wrong");
+    // 固定スロット：回答後ステートへ切り替え
+    els.phraseQuestionView.classList.add("hidden");
+    els.phraseAnswerView.classList.remove("hidden");
+
+    if (isCorrect) {
+      els.feedbackBadge.textContent = "⭕ 正解";
+      els.feedbackBadge.className = "feedback-badge is-correct";
+    } else if (isTimeout) {
+      els.feedbackBadge.textContent = "⏰ 時間切れ";
+      els.feedbackBadge.className = "feedback-badge is-wrong";
+    } else if (isDontKnow) {
+      els.feedbackBadge.textContent = "💡 未解答";
+      els.feedbackBadge.className = "feedback-badge is-wrong";
+    } else {
+      els.feedbackBadge.textContent = "❌ 不正解";
+      els.feedbackBadge.className = "feedback-badge is-wrong";
+    }
+
     els.feedbackMeaning.textContent = currentWord.meaning;
 
     if (currentWord.phrase) {
-      els.feedbackPhrase.textContent = currentWord.phrase;
+      els.feedbackPhrase.innerHTML = highlightWordInPhrase(currentWord.word, currentWord.phrase);
       els.feedbackPhraseJa.textContent = currentWord.phrase_ja || "";
       els.feedbackPhraseRow.classList.remove("hidden");
     } else {
       els.feedbackPhraseRow.classList.add("hidden");
     }
-    els.feedbackPanel.classList.remove("hidden");
 
     const delayMs = isCorrect ? 900 : 1800;
     state.autoNextTimer = setTimeout(function () {
@@ -902,6 +1227,7 @@
 
   function goNextQuestion() {
     clearAutoNextTimer();
+    clearCountdownTimer();
     if (state.currentIndex + 1 < state.questions.length) {
       state.currentIndex += 1;
       renderQuestion();
@@ -919,6 +1245,9 @@
 
     els.resultRate.textContent = rate + "%";
     els.resultDetail.textContent = total + "問中 " + correct + "問正解";
+    if (els.resultMaxCombo) {
+      els.resultMaxCombo.textContent = `🔥 ${state.maxCombo} COMBO`;
+    }
 
     const wrongCount = state.wrongWords.length;
     els.wrongListTitle.textContent = "間違えた単語（" + wrongCount + "語）";
@@ -1155,7 +1484,24 @@
       els.settingsDeckList.appendChild(li);
     });
 
-    // 2. 音声設定の反映
+    // 2. トレーニング演出設定（テーマ・効果音・振動・ヒント形式）
+    els.themeBtns.forEach(btn => {
+      btn.classList.toggle("active", btn.getAttribute("data-theme-val") === state.theme);
+    });
+
+    els.btnToggleSound.classList.toggle("active", state.soundEffect);
+    els.btnToggleSound.setAttribute("aria-pressed", String(state.soundEffect));
+    els.btnToggleSound.textContent = state.soundEffect ? "ON" : "OFF";
+
+    els.btnToggleVibrate.classList.toggle("active", state.vibrate);
+    els.btnToggleVibrate.setAttribute("aria-pressed", String(state.vibrate));
+    els.btnToggleVibrate.textContent = state.vibrate ? "ON" : "OFF";
+
+    els.hintBtns.forEach(btn => {
+      btn.classList.toggle("active", btn.getAttribute("data-hint") === state.phraseHint);
+    });
+
+    // 3. 音声設定の反映
     els.btnToggleAutospeak.classList.toggle("active", state.autoSpeak);
     els.btnToggleAutospeak.setAttribute("aria-pressed", String(state.autoSpeak));
     els.btnToggleAutospeak.textContent = state.autoSpeak ? "ON" : "OFF";
@@ -1165,7 +1511,7 @@
       btn.classList.toggle("active", Math.abs(rate - state.speechRate) < 0.05);
     });
 
-    // 3. バックアップ情報の反映
+    // 4. バックアップ情報の反映
     const meta = loadJSON(STORAGE_KEYS.META, {});
     els.settingsLastBackup.textContent = meta.lastBackupDate
       ? `${meta.lastBackupDate} (${meta.lastBackupTime || ""})`
@@ -1331,8 +1677,14 @@
           state.selectedDeckId = merged.selectedDeckId;
           state.selectedMode = merged.selectedMode;
           state.selectedCount = merged.selectedCount;
+          state.timeLimit = typeof merged.timeLimit === "number" ? merged.timeLimit : 5;
+          state.soundEffect = merged.soundEffect !== false;
+          state.vibrate = merged.vibrate !== false;
+          state.phraseHint = merged.phraseHint || "masked";
+          state.theme = merged.theme || "light";
           state.autoSpeak = merged.autoSpeak !== false;
           state.speechRate = merged.speechRate || 1.0;
+          applyTheme(state.theme);
         }
 
         renderSettingsScreen();
@@ -1365,6 +1717,11 @@
       els.btnSpeakPhrase.classList.add("hidden");
     }
 
+    // テーマ切り替え（ホーム右上）
+    if (els.btnToggleTheme) {
+      els.btnToggleTheme.addEventListener("click", toggleTheme);
+    }
+
     // ナビゲーション
     els.btnOpenStats.addEventListener("click", () => showScreen("stats"));
     els.btnOpenSettings.addEventListener("click", () => showScreen("settings"));
@@ -1395,6 +1752,15 @@
         state.selectedCount = parseInt(btn.getAttribute("data-count"), 10);
         saveSettings({ selectedCount: state.selectedCount });
         els.countBtns.forEach(b => b.classList.toggle("active", b === btn));
+      });
+    });
+
+    // 制限時間選択ボタン（ホーム画面）
+    els.timerBtns.forEach(btn => {
+      btn.addEventListener("click", () => {
+        state.timeLimit = parseInt(btn.getAttribute("data-timer"), 10);
+        saveSettings({ timeLimit: state.timeLimit });
+        els.timerBtns.forEach(b => b.classList.toggle("active", b === btn));
       });
     });
 
@@ -1440,6 +1806,36 @@
       }
     });
 
+    // トレーニング演出設定（設定画面）
+    els.themeBtns.forEach(btn => {
+      btn.addEventListener("click", () => {
+        const t = btn.getAttribute("data-theme-val");
+        applyTheme(t);
+        saveSettings({ theme: t });
+        renderSettingsScreen();
+      });
+    });
+
+    els.btnToggleSound.addEventListener("click", () => {
+      state.soundEffect = !state.soundEffect;
+      saveSettings({ soundEffect: state.soundEffect });
+      renderSettingsScreen();
+    });
+
+    els.btnToggleVibrate.addEventListener("click", () => {
+      state.vibrate = !state.vibrate;
+      saveSettings({ vibrate: state.vibrate });
+      renderSettingsScreen();
+    });
+
+    els.hintBtns.forEach(btn => {
+      btn.addEventListener("click", () => {
+        state.phraseHint = btn.getAttribute("data-hint");
+        saveSettings({ phraseHint: state.phraseHint });
+        renderSettingsScreen();
+      });
+    });
+
     // 音声設定イベント
     els.btnToggleAutospeak.addEventListener("click", () => {
       state.autoSpeak = !state.autoSpeak;
@@ -1467,6 +1863,16 @@
 
     // データ保護の要求
     checkAndRequestPersist();
+
+    // ユーザー操作による AudioContext のアンロック
+    const unlockAudio = () => {
+      getAudioContext();
+      document.removeEventListener("pointerdown", unlockAudio);
+    };
+    document.addEventListener("pointerdown", unlockAudio, { once: true });
+
+    // 初期テーマ適用
+    applyTheme(state.theme || "light");
 
     // 初回ホーム画面描画
     refreshHomeScreen();

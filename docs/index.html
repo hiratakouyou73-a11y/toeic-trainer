@@ -19,6 +19,7 @@
       <div class="home-top-bar">
         <span class="app-badge">TOEIC L&amp;R</span>
         <div class="top-nav-icons">
+          <button type="button" id="btn-toggle-theme" class="icon-nav-btn" aria-label="テーマ切替" title="ダークモード切替">🌙</button>
           <button type="button" id="btn-open-stats" class="icon-nav-btn" aria-label="学習記録を見る" title="記録">📊</button>
           <button type="button" id="btn-open-settings" class="icon-nav-btn" aria-label="設定を開く" title="設定">⚙️</button>
         </div>
@@ -92,6 +93,15 @@
             <button type="button" class="count-btn" data-count="30">30問</button>
           </div>
         </div>
+
+        <div class="setting-block">
+          <span class="setting-label">制限時間（1問あたり）</span>
+          <div class="timer-selector" role="group" aria-label="制限時間の選択">
+            <button type="button" class="timer-btn active" data-timer="5">5秒 (標準)</button>
+            <button type="button" class="timer-btn" data-timer="3">3秒 (高速)</button>
+            <button type="button" class="timer-btn" data-timer="0">OFF</button>
+          </div>
+        </div>
       </div>
 
       <p id="home-error" class="error-msg hidden" role="alert"></p>
@@ -106,10 +116,14 @@
       <div class="quiz-top">
         <div class="quiz-nav">
           <button type="button" id="btn-quit" class="icon-btn" aria-label="中断してホームへ戻る">✕</button>
+          <span id="quiz-combo-badge" class="combo-badge hidden">🔥 2 COMBO!</span>
           <span id="quiz-progress-text" class="progress-text">1 / 10</span>
         </div>
         <div class="progress-bar-bg">
           <div id="quiz-progress-bar" class="progress-bar-fill"></div>
+        </div>
+        <div id="quiz-timer-wrap" class="timer-bar-wrap">
+          <div id="quiz-timer-bar" class="timer-bar-fill"></div>
         </div>
 
         <div class="word-area">
@@ -120,18 +134,26 @@
           <span id="quiz-pos" class="pos-badge">動詞</span>
         </div>
 
-        <!-- 回答後のフィードバック表示領域 -->
-        <div id="feedback-panel" class="feedback-panel hidden" aria-live="polite">
-          <div class="feedback-header">
-            <span id="feedback-badge" class="feedback-badge">⭕ 正解</span>
-            <span id="feedback-meaning" class="feedback-meaning">〜を確認する</span>
+        <!-- 固定スロット：出題時は穴埋めフレーズ、回答後は正誤＋和訳＋完全フレーズ -->
+        <div id="phrase-slot" class="phrase-slot" aria-live="polite">
+          <!-- 出題中ステート -->
+          <div id="phrase-question-view" class="phrase-question-view">
+            <span class="phrase-slot-label">フレーズ穴埋め</span>
+            <p id="quiz-masked-phrase" class="masked-phrase">______ the schedule</p>
           </div>
-          <div id="feedback-phrase-row" class="feedback-phrase-row">
-            <div class="phrase-texts">
-              <p id="feedback-phrase" class="feedback-phrase">confirm the schedule</p>
-              <p id="feedback-phrase-ja" class="feedback-phrase-ja">日程を確認する</p>
+          <!-- 回答後ステート -->
+          <div id="phrase-answer-view" class="phrase-answer-view hidden">
+            <div class="feedback-header">
+              <span id="feedback-badge" class="feedback-badge">⭕ 正解</span>
+              <span id="feedback-meaning" class="feedback-meaning">〜を確認する</span>
             </div>
-            <button type="button" id="btn-speak-phrase" class="speak-btn speak-btn-sm" aria-label="フレーズの発音を聞く">🔊</button>
+            <div id="feedback-phrase-row" class="feedback-phrase-row">
+              <div class="phrase-texts">
+                <p id="feedback-phrase" class="feedback-phrase">confirm the schedule</p>
+                <p id="feedback-phrase-ja" class="feedback-phrase-ja">日程を確認する</p>
+              </div>
+              <button type="button" id="btn-speak-phrase" class="speak-btn speak-btn-sm" aria-label="フレーズの発音を聞く">🔊</button>
+            </div>
           </div>
         </div>
       </div>
@@ -160,6 +182,10 @@
             <span id="result-rate" class="score-rate">80%</span>
           </div>
           <p id="result-detail" class="score-detail">10問中 8問正解</p>
+          <div class="score-combo-row">
+            <span class="score-label">最大連続正解</span>
+            <span id="result-max-combo" class="score-combo">🔥 0 COMBO</span>
+          </div>
         </div>
       </header>
 
@@ -279,6 +305,34 @@
           </div>
         </div>
 
+        <!-- トレーニング設定カード（Phase 7 UX・演出） -->
+        <div class="card">
+          <h3 class="card-inner-title">トレーニング演出・設定</h3>
+          <div class="setting-row">
+            <span class="setting-label">画面テーマ</span>
+            <div class="theme-selector" role="group" aria-label="テーマの選択">
+              <button type="button" class="theme-btn active" data-theme-val="light">☀️ ライト</button>
+              <button type="button" class="theme-btn" data-theme-val="dark">🌙 ダーク</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">正解・不正解の効果音</span>
+            <button type="button" id="btn-toggle-sound" class="toggle-btn active" aria-pressed="true">ON</button>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">バイブレーション</span>
+            <button type="button" id="btn-toggle-vibrate" class="toggle-btn active" aria-pressed="true">ON</button>
+          </div>
+          <div class="setting-row" style="border-bottom:none; margin-bottom:0; padding-bottom:0;">
+            <span class="setting-label">出題中のフレーズ表示</span>
+            <div class="hint-selector" role="group" aria-label="フレーズ表示形式">
+              <button type="button" class="hint-btn active" data-hint="masked">穴埋め</button>
+              <button type="button" class="hint-btn" data-hint="full">全文</button>
+              <button type="button" class="hint-btn" data-hint="off">なし</button>
+            </div>
+          </div>
+        </div>
+
         <!-- 音声読み上げ設定カード -->
         <div class="card">
           <h3 class="card-inner-title">音声読み上げ設定</h3>
@@ -336,7 +390,7 @@
           <h3 class="card-inner-title">アプリ情報</h3>
           <div class="setting-row">
             <span class="setting-label">バージョン</span>
-            <span class="setting-value">v5.0 (Phase 5)</span>
+            <span class="setting-value">v7.0 (Phase 7)</span>
           </div>
           <div class="setting-row" style="border-bottom:none; margin-bottom:0; padding-bottom:0;">
             <span class="setting-label">保存方式</span>
