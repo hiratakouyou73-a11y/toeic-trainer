@@ -16,16 +16,70 @@
 
     <!-- ① ホーム画面 -->
     <section id="screen-home" class="screen active" aria-label="ホーム画面">
+      <div class="home-top-bar">
+        <span class="app-badge">TOEIC L&amp;R</span>
+        <div class="top-nav-icons">
+          <button type="button" id="btn-open-stats" class="icon-nav-btn" aria-label="学習記録を見る" title="記録">📊</button>
+          <button type="button" id="btn-open-settings" class="icon-nav-btn" aria-label="設定を開く" title="設定">⚙️</button>
+        </div>
+      </div>
+
       <header class="home-header">
-        <span class="app-badge">TOEIC L&amp;R 単語トレーニング</span>
         <h1 class="app-title">TOEIC Trainer</h1>
         <p class="app-subtitle">テンポよく反復してスコアアップ</p>
       </header>
 
+      <!-- バックアップ警告（7日以上未バックアップかつ記録あり） -->
+      <div id="home-backup-alert" class="backup-alert hidden" role="status">
+        <div class="alert-icon">⚠️</div>
+        <div class="alert-body">
+          <p class="alert-title">バックアップ推奨</p>
+          <p class="alert-text">前回の保存から7日以上経過しています。設定から記録を書き出しましょう。</p>
+        </div>
+        <button type="button" id="btn-alert-to-settings" class="alert-btn">設定へ</button>
+      </div>
+
+      <!-- 今日のサマリー -->
+      <div class="card summary-card">
+        <div class="summary-header">
+          <span class="card-tag">今日の学習</span>
+          <span id="streak-badge" class="streak-badge">🔥 0日連続</span>
+        </div>
+        <div class="summary-stats-grid">
+          <div class="stat-box">
+            <span class="stat-num" id="today-count">0</span>
+            <span class="stat-label">解いた問題数</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-num" id="today-rate">--%</span>
+            <span class="stat-label">本日の正答率</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 出題設定カード -->
       <div class="card home-card">
         <div class="setting-row">
           <span class="setting-label">使用教材</span>
           <span id="deck-info" class="setting-value">基礎サンプル（30語）</span>
+        </div>
+
+        <div class="setting-block">
+          <span class="setting-label">出題モード</span>
+          <div class="mode-selector" role="group" aria-label="出題モードの選択">
+            <button type="button" class="mode-btn active" data-mode="smart">
+              <span class="mode-title">おまかせ</span>
+              <span class="mode-desc">苦手・未学習を優先</span>
+            </button>
+            <button type="button" class="mode-btn" data-mode="random">
+              <span class="mode-title">ランダム</span>
+              <span class="mode-desc">全語から抽出</span>
+            </button>
+            <button type="button" class="mode-btn" data-mode="weak">
+              <span class="mode-title">苦手だけ</span>
+              <span class="mode-desc">直近の誤答単語</span>
+            </button>
+          </div>
         </div>
 
         <div class="setting-block">
@@ -118,6 +172,133 @@
         <div class="result-sub-actions">
           <button type="button" id="btn-retry-all" class="secondary-btn">もう一度</button>
           <button type="button" id="btn-back-home" class="secondary-btn">ホームへ</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ④ 記録画面 -->
+    <section id="screen-stats" class="screen sub-screen" aria-label="学習記録画面">
+      <div class="sub-screen-header">
+        <button type="button" id="btn-stats-back" class="icon-btn" aria-label="戻る">←</button>
+        <h2 class="sub-screen-title">学習の記録</h2>
+        <div style="width:40px;"></div>
+      </div>
+
+      <div class="sub-screen-content">
+        <!-- 総合スコア -->
+        <div class="card">
+          <div class="stat-summary-grid">
+            <div class="stat-summary-cell">
+              <span class="cell-label">連続学習</span>
+              <span id="stats-streak" class="cell-val">0日</span>
+            </div>
+            <div class="stat-summary-cell">
+              <span class="cell-label">累計解答数</span>
+              <span id="stats-total-answers" class="cell-val">0問</span>
+            </div>
+            <div class="stat-summary-cell">
+              <span class="cell-label">総合正答率</span>
+              <span id="stats-overall-rate" class="cell-val">--%</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 習熟度内訳 -->
+        <div class="card">
+          <h3 class="card-inner-title">単語の習熟度</h3>
+          <div class="mastery-bars">
+            <div class="mastery-bar-wrap">
+              <div class="mastery-info"><span class="m-dot m-weak"></span>苦手 (streak 0)<span id="m-weak-count" class="m-count">0</span></div>
+              <div class="m-track"><div id="m-weak-bar" class="m-fill m-weak-fill" style="width:0%"></div></div>
+            </div>
+            <div class="mastery-bar-wrap">
+              <div class="mastery-info"><span class="m-dot m-learning"></span>学習中 (streak 1-2)<span id="m-learning-count" class="m-count">0</span></div>
+              <div class="m-track"><div id="m-learning-bar" class="m-fill m-learning-fill" style="width:0%"></div></div>
+            </div>
+            <div class="mastery-bar-wrap">
+              <div class="mastery-info"><span class="m-dot m-mastered"></span>覚えた (streak 3+)<span id="m-mastered-count" class="m-count">0</span></div>
+              <div class="m-track"><div id="m-mastered-bar" class="m-fill m-mastered-fill" style="width:0%"></div></div>
+            </div>
+            <div class="mastery-bar-wrap">
+              <div class="mastery-info"><span class="m-dot m-unlearned"></span>未学習<span id="m-unlearned-count" class="m-count">0</span></div>
+              <div class="m-track"><div id="m-unlearned-bar" class="m-fill m-unlearned-fill" style="width:0%"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 14日間学習グラフ -->
+        <div class="card">
+          <h3 class="card-inner-title">過去14日間の回答数</h3>
+          <div id="chart-container" class="chart-container">
+            <!-- JSで動的にバーを生成 -->
+          </div>
+        </div>
+
+        <!-- 苦手単語ワースト一覧 -->
+        <div class="card">
+          <h3 class="card-inner-title">苦手な単語（不正解が多い順）</h3>
+          <p id="no-weak-msg" class="no-wrong-msg hidden">現在、苦手単語はありません！</p>
+          <ul id="stats-weak-list" class="stats-weak-list"></ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ⑤ 設定＆バックアップ画面 -->
+    <section id="screen-settings" class="screen sub-screen" aria-label="設定画面">
+      <div class="sub-screen-header">
+        <button type="button" id="btn-settings-back" class="icon-btn" aria-label="戻る">←</button>
+        <h2 class="sub-screen-title">設定とバックアップ</h2>
+        <div style="width:40px;"></div>
+      </div>
+
+      <div class="sub-screen-content">
+        <!-- バックアップカード -->
+        <div class="card">
+          <h3 class="card-inner-title">学習記録のバックアップ</h3>
+          <p class="setting-desc">ブラウザの履歴削除や機種変更で記録が消えるのを防ぐため、定期的にJSONファイルとして保存してください。</p>
+          
+          <div class="setting-row" style="margin-top:12px;">
+            <span class="setting-label">最終バックアップ</span>
+            <span id="settings-last-backup" class="setting-value">未実行</span>
+          </div>
+
+          <div class="backup-actions">
+            <button type="button" id="btn-export-backup" class="primary-btn btn-sm">記録を書き出す (JSON保存)</button>
+            <div class="import-wrap">
+              <label for="import-backup-input" class="secondary-btn btn-sm file-label">記録を復元する (ファイル選択)</label>
+              <input type="file" id="import-backup-input" accept=".json,application/json" class="hidden-input">
+            </div>
+          </div>
+
+          <!-- 直前バックアップの元に戻すボタン -->
+          <div id="undo-wrap" class="undo-wrap hidden">
+            <p class="undo-info">直前に復元した記録があります。</p>
+            <button type="button" id="btn-undo-restore" class="text-link-btn">復元を取り消して元に戻す</button>
+          </div>
+        </div>
+
+        <!-- データ保護状態カード -->
+        <div class="card">
+          <h3 class="card-inner-title">ブラウザのデータ保護</h3>
+          <p class="setting-desc">端末のストレージ容量不足によるブラウザの自動削除から記録を守る設定です。</p>
+          <div class="setting-row" style="margin-top:12px;">
+            <span class="setting-label">自動削除の保護状態</span>
+            <span id="settings-persist-status" class="setting-value">確認中...</span>
+          </div>
+          <p class="protection-note">※「保護済み」でも、ブラウザの「閲覧履歴とサイトデータ削除」を行うと消去されます。手動バックアップが最も確実な保護手段です。</p>
+        </div>
+
+        <!-- アプリ情報 -->
+        <div class="card">
+          <h3 class="card-inner-title">アプリ情報</h3>
+          <div class="setting-row">
+            <span class="setting-label">バージョン</span>
+            <span class="setting-value">v4.0 (Phase 4)</span>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">保存方式</span>
+            <span class="setting-value">localStorage (完全ローカル)</span>
+          </div>
         </div>
       </div>
     </section>
