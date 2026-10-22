@@ -12,3 +12,4 @@ toeic-backup-*.json
 # Python
 __pycache__/
 .venv/
+docs/test_*.html
