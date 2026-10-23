@@ -76,12 +76,25 @@
     const def = {
       schemaVersion: SCHEMA_VERSION,
       words: {}, // wordId: { correct: 0, wrong: 0, streak: 0, lastAt: "YYYY-MM-DD" }
-      days: {}   // "YYYY-MM-DD": { answered: 0, correct: 0 }
+      days: {},  // "YYYY-MM-DD": { answered: 0, correct: 0 }
+      combo: { current: 0, max: 0 }
     };
     const p = loadJSON(STORAGE_KEYS.PROGRESS, def);
     if (!p.words) p.words = {};
     if (!p.days) p.days = {};
+    if (!p.combo || typeof p.combo !== "object") {
+      p.combo = { current: 0, max: 0 };
+    }
     return p;
+  }
+
+  function saveCombo(current, max) {
+    const p = getProgress();
+    p.combo = {
+      current: Math.min(999, Math.max(0, Number(current) || 0)),
+      max: Math.min(999, Math.max(0, Number(max) || 0))
+    };
+    saveJSON(STORAGE_KEYS.PROGRESS, p);
   }
 
   function saveWordRecord(wordId, isCorrect) {
@@ -638,6 +651,39 @@
     }
   }
 
+  function triggerMegaCombo(combo) {
+    if (!els.megaComboBanner || !els.megaComboNum || combo < 2) return;
+    if (state.megaComboTimer !== null) {
+      clearTimeout(state.megaComboTimer);
+      state.megaComboTimer = null;
+    }
+
+    els.megaComboNum.textContent = combo;
+    els.megaComboBanner.className = "mega-combo-banner";
+
+    if (combo >= 100) {
+      els.megaComboBanner.classList.add("mega-combo-tier-4");
+    } else if (combo >= 50) {
+      els.megaComboBanner.classList.add("mega-combo-tier-3");
+    } else if (combo >= 10) {
+      els.megaComboBanner.classList.add("mega-combo-tier-2");
+    } else {
+      els.megaComboBanner.classList.add("mega-combo-tier-1");
+    }
+
+    // 強制リフローでアニメーションを即座に再起動
+    void els.megaComboBanner.offsetWidth;
+    els.megaComboBanner.classList.add("mega-combo-animate");
+
+    state.megaComboTimer = setTimeout(() => {
+      if (els.megaComboBanner) {
+        els.megaComboBanner.classList.add("hidden");
+        els.megaComboBanner.classList.remove("mega-combo-animate");
+      }
+      state.megaComboTimer = null;
+    }, 650);
+  }
+
   // ==========================================
   // 6.7 フレーズ穴埋め・強調用ヘルパー
   // ==========================================
@@ -685,6 +731,15 @@
   // 7. アプリ状態管理
   // ==========================================
   const initialSettings = getSettings();
+  if (initialSettings.timeLimit === 3) {
+    initialSettings.timeLimit = 5;
+    saveSettings({ timeLimit: 5 });
+  }
+
+  const initialProg = getProgress();
+  const initialCurrentCombo = (initialProg.combo && initialProg.combo.current) || 0;
+  const initialBestCombo = (initialProg.combo && initialProg.combo.max) || 0;
+
   const state = {
     selectedDeckId: initialSettings.selectedDeckId || "sample",
     selectedCount: initialSettings.selectedCount || 10,
@@ -704,9 +759,11 @@
     correctCount: 0,
     wrongWords: [],
     autoNextTimer: null,
-    // Phase 7
-    combo: 0,
-    maxCombo: 0,
+    // Phase 7 & COMBO 999
+    combo: initialCurrentCombo,
+    maxCombo: initialBestCombo,
+    sessionMaxCombo: initialCurrentCombo,
+    megaComboTimer: null,
     timerId: null
   };
 
@@ -755,6 +812,8 @@
     // クイズ
     btnQuit: document.getElementById("btn-quit"),
     quizComboBadge: document.getElementById("quiz-combo-badge"),
+    megaComboBanner: document.getElementById("mega-combo-banner"),
+    megaComboNum: document.getElementById("mega-combo-num"),
     progressText: document.getElementById("quiz-progress-text"),
     progressBar: document.getElementById("quiz-progress-bar"),
     quizTimerWrap: document.getElementById("quiz-timer-wrap"),
@@ -1040,8 +1099,8 @@
     state.currentIndex = 0;
     state.correctCount = 0;
     state.wrongWords = [];
-    state.combo = 0;
-    state.maxCombo = 0;
+    // セッションをまたいでCOMBOを維持（最大999）
+    state.sessionMaxCombo = state.combo;
 
     showScreen("quiz");
     renderQuestion();
@@ -1108,7 +1167,7 @@
     els.choiceBtns.forEach((btn, idx) => {
       const choice = state.currentChoices[idx];
       btn.disabled = false;
-      btn.classList.remove("correct", "wrong");
+      btn.classList.remove("correct", "wrong", "is-selected", "shake");
       setChoiceButtonContent(btn, choice ? choice.meaning : "", "");
     });
 
@@ -1136,12 +1195,18 @@
 
     if (isCorrect) {
       state.correctCount += 1;
-      state.combo += 1;
+      state.combo = Math.min(999, state.combo + 1);
       if (state.combo > state.maxCombo) {
         state.maxCombo = state.combo;
       }
+      if (state.combo > state.sessionMaxCombo) {
+        state.sessionMaxCombo = state.combo;
+      }
+      saveCombo(state.combo, state.maxCombo);
+
       playCorrectSound(state.combo);
       triggerVibrate(15);
+      triggerMegaCombo(state.combo);
 
       if (state.combo >= 2) {
         els.quizComboBadge.textContent = `🔥 ${state.combo} COMBO!`;
@@ -1160,10 +1225,14 @@
       }
     } else {
       state.combo = 0;
+      saveCombo(0, state.maxCombo);
       state.wrongWords.push(currentWord);
       playWrongSound();
       triggerVibrate([40, 50, 70]);
       els.quizComboBadge.classList.add("hidden");
+      if (els.megaComboBanner) {
+        els.megaComboBanner.classList.add("hidden");
+      }
 
       if (selectedIndex !== null) {
         const pickedBtn = els.choiceBtns[selectedIndex];
@@ -1177,8 +1246,13 @@
 
     els.choiceBtns.forEach((btn, idx) => {
       btn.disabled = true;
+      btn.classList.remove("is-selected");
       const choice = state.currentChoices[idx];
       if (!choice) return;
+
+      if (idx === selectedIndex) {
+        btn.classList.add("is-selected");
+      }
 
       if (choice.id === currentWord.id) {
         btn.classList.add("correct");
@@ -1246,7 +1320,11 @@
     els.resultRate.textContent = rate + "%";
     els.resultDetail.textContent = total + "問中 " + correct + "問正解";
     if (els.resultMaxCombo) {
-      els.resultMaxCombo.textContent = `🔥 ${state.maxCombo} COMBO`;
+      if (state.combo > 0) {
+        els.resultMaxCombo.textContent = `🔥 現在 ${state.combo} COMBO 継続中！ (最高: ${state.maxCombo})`;
+      } else {
+        els.resultMaxCombo.textContent = `🔥 最高 ${state.maxCombo} COMBO (今回最大: ${state.sessionMaxCombo})`;
+      }
     }
 
     const wrongCount = state.wrongWords.length;

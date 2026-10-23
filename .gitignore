@@ -9,7 +9,8 @@ private/
 !docs/icons/*.png
 toeic-backup-*.json
 
-# Python
+# Python / Scratch
 __pycache__/
 .venv/
+scratch/
 docs/test_*.html

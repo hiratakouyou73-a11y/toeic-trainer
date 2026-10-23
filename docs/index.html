@@ -98,8 +98,7 @@
           <span class="setting-label">制限時間（1問あたり）</span>
           <div class="timer-selector" role="group" aria-label="制限時間の選択">
             <button type="button" class="timer-btn active" data-timer="5">5秒 (標準)</button>
-            <button type="button" class="timer-btn" data-timer="3">3秒 (高速)</button>
-            <button type="button" class="timer-btn" data-timer="0">OFF</button>
+            <button type="button" class="timer-btn" data-timer="0">OFF (無制限)</button>
           </div>
         </div>
       </div>
@@ -113,6 +112,14 @@
 
     <!-- ② 問題画面 -->
     <section id="screen-quiz" class="screen" aria-label="問題画面">
+      <!-- ナナメ特大COMBO演出バナー -->
+      <div id="mega-combo-banner" class="mega-combo-banner hidden" aria-hidden="true">
+        <div class="mega-combo-content">
+          <span id="mega-combo-num" class="mega-combo-num">2</span>
+          <span class="mega-combo-text">COMBO!</span>
+        </div>
+      </div>
+
       <div class="quiz-top">
         <div class="quiz-nav">
           <button type="button" id="btn-quit" class="icon-btn" aria-label="中断してホームへ戻る">✕</button>

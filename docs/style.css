@@ -391,8 +391,8 @@ body {
 /* 制限時間選択 */
 .timer-selector {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
 }
 
 .timer-btn {
@@ -846,8 +846,9 @@ body {
 }
 
 .choice-btn:active:not(:disabled) {
-  background: var(--primary-light);
-  border-color: var(--primary);
+  background: #ecfdf5;
+  border-color: #10b981;
+  transform: scale(0.985);
 }
 
 .choice-btn:disabled {
@@ -863,6 +864,13 @@ body {
   border-color: var(--correct-border);
   color: var(--correct-text);
   font-weight: 700;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.25);
+}
+
+.choice-btn.correct.is-selected {
+  background: #bbf7d0;
+  border-color: #15803d;
+  box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.38);
 }
 
 .choice-btn.wrong {
@@ -870,6 +878,10 @@ body {
   border-color: var(--wrong-border);
   color: var(--wrong-text);
   font-weight: 700;
+}
+
+.choice-btn.wrong.is-selected {
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.3);
 }
 
 .choice-mark {
@@ -1490,9 +1502,20 @@ body {
 }
 
 [data-theme="dark"] .choice-btn:active:not(:disabled) {
-  background: #1e293b;
-  border-color: var(--primary);
+  background: rgba(16, 185, 129, 0.22);
+  border-color: #34d399;
   color: #ffffff;
+  transform: scale(0.985);
+}
+
+[data-theme="dark"] .choice-btn.correct {
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.35);
+}
+
+[data-theme="dark"] .choice-btn.correct.is-selected {
+  background: #065f46;
+  border-color: #34d399;
+  box-shadow: 0 0 0 4px rgba(52, 211, 153, 0.45);
 }
 
 [data-theme="dark"] .choice-btn:disabled:not(.correct):not(.wrong) {
@@ -1518,3 +1541,159 @@ body {
   color: var(--text-main);
   border-color: var(--border);
 }
+
+/* ========================================================
+   ナナメ特大COMBO演出バナー (大迫力・短時間ポップアップ)
+   ======================================================== */
+.mega-combo-banner {
+  position: absolute;
+  top: 36%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-12deg);
+  pointer-events: none;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.mega-combo-banner.hidden {
+  display: none;
+}
+
+.mega-combo-content {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Impact", sans-serif;
+  font-style: italic;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  padding: 8px 24px;
+  border-radius: 999px;
+  text-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 10px 35px rgba(0, 0, 0, 0.35);
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(4px);
+}
+
+.mega-combo-num {
+  font-size: 54px;
+  line-height: 1;
+}
+
+.mega-combo-text {
+  font-size: 26px;
+  line-height: 1;
+  letter-spacing: 0.05em;
+}
+
+/* Tier 1 (2〜9 COMBO): エメラルド＆シアンの爽快な光 */
+.mega-combo-tier-1 .mega-combo-content {
+  background: linear-gradient(135deg, #10b981, #06b6d4);
+  color: #ffffff;
+  box-shadow: 0 10px 30px rgba(6, 182, 212, 0.5);
+}
+
+/* Tier 2 (10〜49 COMBO): 燃え盛るサンシャインゴールド */
+.mega-combo-tier-2 .mega-combo-content {
+  background: linear-gradient(135deg, #f59e0b, #ea580c);
+  color: #ffffff;
+  box-shadow: 0 12px 35px rgba(234, 88, 12, 0.6);
+}
+
+/* Tier 3 (50〜99 COMBO): 超熱血レッド＆クリムゾン */
+.mega-combo-tier-3 .mega-combo-content {
+  background: linear-gradient(135deg, #f43f5e, #be123c);
+  color: #ffffff;
+  box-shadow: 0 14px 40px rgba(225, 29, 72, 0.7);
+}
+
+/* Tier 4 (100〜999 COMBO): 神域のパープルゴールドマスター */
+.mega-combo-tier-4 .mega-combo-content {
+  background: linear-gradient(135deg, #a855f7, #ec4899, #f59e0b);
+  color: #ffffff;
+  box-shadow: 0 16px 45px rgba(168, 85, 247, 0.75);
+  border-color: rgba(254, 240, 138, 0.9);
+}
+
+/* アニメーション：斜めにシュパッ！と拡大し、一瞬で上へ抜ける */
+.mega-combo-animate {
+  animation: mega-combo-slash 0.65s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes mega-combo-slash {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(-16deg) scale(0.35);
+  }
+  25% {
+    opacity: 1;
+    transform: translate(-50%, -50%) rotate(-12deg) scale(1.18);
+  }
+  45% {
+    opacity: 1;
+    transform: translate(-50%, -50%) rotate(-12deg) scale(1.0);
+  }
+  75% {
+    opacity: 0.95;
+    transform: translate(-50%, -58%) rotate(-10deg) scale(1.02);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -85%) rotate(-8deg) scale(1.15);
+  }
+}
+
+/* ========================================================
+   Google Pixel 9a 等 縦長端末 (アスペクト比 20:9 / 高さ780px以上) 向け最適化
+   ======================================================== */
+@media (min-height: 780px) {
+  .app-container {
+    max-width: 440px; /* Pixel 9a (412px) に美しくフィット */
+  }
+
+  .screen {
+    padding: 16px 16px max(14px, env(safe-area-inset-bottom, 14px));
+  }
+
+  .quiz-word {
+    font-size: 32px;
+  }
+
+  .phrase-slot {
+    min-height: 80px;
+    max-height: 88px;
+    padding: 8px 12px;
+    margin-bottom: 10px;
+  }
+
+  .masked-phrase {
+    font-size: 15px;
+  }
+
+  .choices-container {
+    gap: 9px;
+  }
+
+  .choice-btn {
+    min-height: 56px; /* 親指で圧倒的に押しやすい絶妙な高さ */
+    padding: 10px 14px;
+    font-size: 15.5px;
+    border-radius: 12px;
+  }
+
+  .dont-know-btn {
+    min-height: 44px;
+    font-size: 14px;
+    border-radius: 10px;
+  }
+
+  .quiz-footer-action {
+    margin-top: 6px;
+    min-height: 44px;
+  }
+}
+
