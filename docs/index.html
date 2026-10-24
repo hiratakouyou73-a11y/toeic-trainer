@@ -9,7 +9,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="stylesheet" href="style.css?v=8.0_part1">
+  <link rel="stylesheet" href="style.css?v=9.0">
 </head>
 <body>
   <div class="app-container">
@@ -60,26 +60,11 @@
 
       <!-- 出題設定カード -->
       <div class="card home-card">
-        <div class="setting-row">
+        <div class="setting-block">
           <label for="deck-select" class="setting-label">使用教材</label>
           <select id="deck-select" class="deck-select" aria-label="使用教材の選択">
             <option value="sample">基礎サンプル（30語）</option>
           </select>
-        </div>
-
-        <div class="setting-block" id="format-setting-block">
-          <span class="setting-label">出題形式</span>
-          <div class="format-selector" role="group" aria-label="出題形式の選択">
-            <button type="button" class="format-btn active" data-format="standard">
-              <span class="format-title">単語4択</span>
-              <span class="format-desc">英単語 → 意味</span>
-            </button>
-            <button type="button" class="format-btn" data-format="blank">
-              <span class="format-title">Part 1 例文穴埋め</span>
-              <span class="format-desc">和訳+空欄 → 英単語</span>
-            </button>
-          </div>
-          <p id="format-hint-text" class="format-hint-text"></p>
         </div>
 
         <div class="setting-block">
@@ -148,11 +133,12 @@
           <div id="quiz-timer-bar" class="timer-bar-fill"></div>
         </div>
 
-        <div class="word-area">
+        <div class="word-area" id="word-area">
           <div class="word-row">
             <h2 id="quiz-word" class="quiz-word">confirm</h2>
             <button type="button" id="btn-speak-word" class="speak-btn" aria-label="英単語の発音を聞く">🔊</button>
           </div>
+          <p id="quiz-subtext" class="quiz-subtext hidden"></p>
           <span id="quiz-pos" class="pos-badge">動詞</span>
         </div>
 
@@ -165,9 +151,10 @@
           </div>
           <!-- 回答後ステート -->
           <div id="phrase-answer-view" class="phrase-answer-view hidden">
-            <div class="feedback-header">
+            <div class="feedback-header" id="feedback-header">
               <span id="feedback-badge" class="feedback-badge">⭕ 正解</span>
               <span id="feedback-meaning" class="feedback-meaning">〜を確認する</span>
+              <button type="button" id="btn-speak-blank" class="speak-btn speak-btn-sm hidden" aria-label="例文の発音を聞く">🔊</button>
             </div>
             <div id="feedback-phrase-row" class="feedback-phrase-row">
               <div class="phrase-texts">
@@ -412,7 +399,7 @@
           <h3 class="card-inner-title">アプリ情報</h3>
           <div class="setting-row">
             <span class="setting-label">バージョン</span>
-            <span class="setting-value">v7.1 (Compact &amp; Dark Mode)</span>
+            <span class="setting-value">v9.0 (Track 5 &amp; UI Redesign)</span>
           </div>
           <div class="setting-row" style="border-bottom:none; margin-bottom:0; padding-bottom:0;">
             <span class="setting-label">保存方式</span>
@@ -424,7 +411,7 @@
 
   </div>
 
-  <script src="data/sample_words.js?v=7.1"></script>
-  <script src="app.js?v=8.0_part1"></script>
+  <script src="data/sample_words.js?v=9.0"></script>
+  <script src="app.js?v=9.0"></script>
 </body>
 </html>

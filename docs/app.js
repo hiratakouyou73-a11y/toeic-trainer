@@ -899,9 +899,6 @@
     todayCount: document.getElementById("today-count"),
     todayRate: document.getElementById("today-rate"),
     deckSelect: document.getElementById("deck-select"),
-    formatBlock: document.getElementById("format-setting-block"),
-    formatBtns: document.querySelectorAll(".format-btn"),
-    formatHintText: document.getElementById("format-hint-text"),
     modeBtns: document.querySelectorAll(".mode-btn"),
     countBtns: document.querySelectorAll(".count-btn"),
     timerBtns: document.querySelectorAll(".timer-btn"),
@@ -919,14 +916,17 @@
     quizTimerBar: document.getElementById("quiz-timer-bar"),
     quizWord: document.getElementById("quiz-word"),
     btnSpeakWord: document.getElementById("btn-speak-word"),
+    quizSubtext: document.getElementById("quiz-subtext"),
     quizPos: document.getElementById("quiz-pos"),
     phraseSlot: document.getElementById("phrase-slot"),
     phraseQuestionView: document.getElementById("phrase-question-view"),
     phraseAnswerView: document.getElementById("phrase-answer-view"),
     phraseSlotLabel: document.querySelector(".phrase-slot-label"),
     quizMaskedPhrase: document.getElementById("quiz-masked-phrase"),
+    feedbackHeader: document.getElementById("feedback-header"),
     feedbackBadge: document.getElementById("feedback-badge"),
     feedbackMeaning: document.getElementById("feedback-meaning"),
+    btnSpeakBlank: document.getElementById("btn-speak-blank"),
     feedbackPhraseRow: document.getElementById("feedback-phrase-row"),
     feedbackPhrase: document.getElementById("feedback-phrase"),
     feedbackPhraseJa: document.getElementById("feedback-phrase-ja"),
@@ -1108,59 +1108,33 @@
     });
   }
 
+  function escapeHTML(str) {
+    return String(str || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  // Track 5（Part 1重要語100）教材かどうかの厳密判定
+  function isTrack5Deck(deck, words) {
+    const wordList = Array.isArray(words) ? words : (deck && Array.isArray(deck.words) ? deck.words : []);
+    if (wordList.length > 0 && wordList.some(w => /^kin[-_]?t0?5[-_]/i.test(w.id || ""))) {
+      return true;
+    }
+    const lowerId = (deck && deck.id ? deck.id : state.selectedDeckId || "").toLowerCase();
+    const lowerName = (deck && deck.name ? deck.name : "").toLowerCase();
+    const part1Keywords = ["t05", "track05", "track5", "track 5", "track_5", "part1", "part 1", "part_1", "パート1", "パート１", "写真描写"];
+    return part1Keywords.some(kw => lowerId.includes(kw) || lowerName.includes(kw));
+  }
+
   function updateFormatSelectorForDeck() {
     const deckWords = getDeckWords();
     const activeDeck = getActiveDeck();
-    const phraseCount = deckWords.filter(w => w.phrase && w.phrase.trim()).length;
-    const hasPhrases = phraseCount >= 4;
-    const phraseRatio = deckWords.length > 0 ? (phraseCount / deckWords.length) : 0;
-    
-    // 全方位キーワード判定（ID + 教材名）
-    const lowerId = (state.selectedDeckId || "").toLowerCase();
-    const lowerName = (activeDeck && activeDeck.name ? activeDeck.name : "").toLowerCase();
-    const part1Keywords = ["t05", "track05", "track5", "track 5", "track_5", "part1", "part 1", "part_1", "パート1", "パート１", "写真描写"];
-    const isPart1Named = part1Keywords.some(kw => lowerId.includes(kw) || lowerName.includes(kw));
-    // 例文が8割以上登録されている教材も自動で穴埋めをデフォルト推奨
-    const isRichPhraseDeck = phraseRatio >= 0.8 && hasPhrases;
+    const isTrack5 = isTrack5Deck(activeDeck, deckWords);
 
-    if ((isPart1Named || isRichPhraseDeck) && hasPhrases) {
-      // Track 5 / Part 1 や例文充実教材は自動的に「例文穴埋め」を最優先でデフォルト選択
-      state.selectedFormat = "blank";
-      saveSettings({ selectedFormat: "blank" });
-    } else if (!hasPhrases && state.selectedFormat === "blank") {
-      // 例文がない教材で穴埋めが選ばれていたら通常モードに戻す
-      state.selectedFormat = "standard";
-      saveSettings({ selectedFormat: "standard" });
-    }
-
-    if (els.formatBtns) {
-      els.formatBtns.forEach(btn => {
-        const fmt = btn.getAttribute("data-format");
-        btn.classList.toggle("active", fmt === state.selectedFormat);
-        if (fmt === "blank") {
-          btn.disabled = !hasPhrases;
-          btn.style.opacity = hasPhrases ? "1" : "0.5";
-          btn.title = hasPhrases ? "" : "この教材には例文が登録されていません";
-        }
-      });
-    }
-
-    // ヒント案内とスタートボタンの表示更新
-    if (els.formatHintText) {
-      if (state.selectedFormat === "blank") {
-        els.formatHintText.textContent = "💡【Part 1 例文穴埋め】和訳と英文の空欄を見て、適切な英単語を4択で選びます。";
-      } else {
-        els.formatHintText.textContent = "💡【単語4択】英単語を見て、4択から正しい日本語の意味を選びます。";
-      }
-    }
-
-    if (els.btnStart) {
-      if (state.selectedFormat === "blank") {
-        els.btnStart.textContent = "例文穴埋めスタート ▶";
-      } else {
-        els.btnStart.textContent = "スタート";
-      }
-    }
+    state.selectedFormat = isTrack5 ? "blank" : "standard";
+    saveSettings({ selectedFormat: state.selectedFormat });
   }
 
   function refreshHomeScreen() {
@@ -1182,7 +1156,7 @@
     const streak = calculateStreak(p.days);
     els.streakBadge.textContent = `🔥 ${streak}日連続`;
 
-    // 出題形式ボタンのアクティブ状態と有効/無効判定
+    // Track 5 かどうかに応じて出題形式を自動設定
     updateFormatSelectorForDeck();
 
     // モード・出題数・タイマーボタンのアクティブ状態を反映
@@ -1225,6 +1199,7 @@
   // 10. クイズ進行処理
   // ==========================================
   function startQuiz(customPool) {
+    updateFormatSelectorForDeck();
     const allWords = getDeckWords();
     state.allWords = allWords;
 
@@ -1299,17 +1274,33 @@
     const isBlankMode = state.selectedFormat === "blank" && !!currentWord.phrase;
 
     if (isBlankMode) {
-      els.quizWord.textContent = currentWord.phrase_ja || currentWord.meaning;
+      // Track 5 例題穴埋めモード：メインエリアに空欄付き英文＋和訳を大きく表示
+      els.quizWord.innerHTML = maskWordInPhrase(currentWord.word, currentWord.phrase);
       els.quizWord.classList.add("is-blank-mode");
-      els.phraseSlot.classList.add("is-blank-mode");
-      els.phraseSlotLabel.textContent = "Part 1 英文穴埋め";
-      els.quizMaskedPhrase.innerHTML = maskWordInPhrase(currentWord.word, currentWord.phrase);
+      els.btnSpeakWord.classList.add("hidden");
+
+      if (els.quizSubtext) {
+        els.quizSubtext.textContent = currentWord.phrase_ja || currentWord.meaning;
+        els.quizSubtext.classList.remove("hidden");
+      }
+
+      els.phraseSlotLabel.textContent = "";
+      els.quizMaskedPhrase.textContent = "空欄に入る英単語を選択";
+      els.quizMaskedPhrase.classList.add("is-guide-text");
     } else {
+      // 通常の単語クイズモード：メインエリアに英単語＋発音ボタン
       els.quizWord.textContent = currentWord.word;
       els.quizWord.classList.remove("is-blank-mode");
-      els.phraseSlot.classList.remove("is-blank-mode");
+      if (speechSupported) {
+        els.btnSpeakWord.classList.remove("hidden");
+      }
+      if (els.quizSubtext) {
+        els.quizSubtext.textContent = "";
+        els.quizSubtext.classList.add("hidden");
+      }
 
       if (currentWord.phrase && state.phraseHint !== "off") {
+        els.quizMaskedPhrase.classList.remove("is-guide-text");
         if (state.phraseHint === "masked") {
           els.phraseSlotLabel.textContent = "フレーズ穴埋め";
           els.quizMaskedPhrase.innerHTML = maskWordInPhrase(currentWord.word, currentWord.phrase);
@@ -1318,8 +1309,9 @@
           els.quizMaskedPhrase.textContent = currentWord.phrase;
         }
       } else {
-        els.phraseSlotLabel.textContent = "出題";
-        els.quizMaskedPhrase.textContent = currentWord.phrase || "4択から正しい意味を選択";
+        els.phraseSlotLabel.textContent = "";
+        els.quizMaskedPhrase.textContent = "正しい意味を選択";
+        els.quizMaskedPhrase.classList.add("is-guide-text");
       }
     }
 
@@ -1353,7 +1345,7 @@
     // タイマー開始
     startCountdownTimer();
 
-    // 通常モードのみ出題時に単語を発音（穴埋めモードは答え漏れ防止のため回答後に英文を発音）
+    // 通常モードのみ出題時に1回だけ英単語を発音（穴埋めモードは回答後に英文を1回発音）
     if (state.autoSpeak && !isBlankMode) {
       speakEnglish(currentWord.word);
     }
@@ -1464,27 +1456,35 @@
     }
 
     if (isBlankMode) {
-      const posStr = currentWord.pos ? `[${currentWord.pos}] ` : "";
-      els.feedbackMeaning.textContent = `${currentWord.word} ${posStr}: ${currentWord.meaning}`;
-    } else {
-      els.feedbackMeaning.textContent = currentWord.meaning;
-    }
+      // メインの英文の空欄 [ ______ ] にそのまま正解単語（活用形）をハイライト表示で埋める
+      els.quizWord.innerHTML = highlightWordInPhrase(currentWord.word, currentWord.phrase);
 
-    if (currentWord.phrase) {
-      els.feedbackPhrase.innerHTML = highlightWordInPhrase(currentWord.word, currentWord.phrase);
-      els.feedbackPhraseJa.textContent = currentWord.phrase_ja || "";
-      els.feedbackPhraseRow.classList.remove("hidden");
-    } else {
-      els.feedbackPhraseRow.classList.add("hidden");
-    }
-
-    // 回答後の音声再生：穴埋めモードなら例文全体をネイティブ発音で自動再生！
-    if (state.autoSpeak) {
-      if (isBlankMode && currentWord.phrase) {
-        speakEnglish(currentWord.phrase);
-      } else if (!isBlankMode) {
-        speakEnglish(currentWord.word);
+      // 中段スロットには見出し語の原形・意味と発音ボタンを1行でスッキリ表示（和訳や英文の重複を防ぐ）
+      if (els.feedbackHeader) els.feedbackHeader.classList.add("is-single-row");
+      els.feedbackMeaning.innerHTML = `<span class="feedback-meaning-word">${escapeHTML(currentWord.word)}</span>：${escapeHTML(currentWord.meaning)}`;
+      if (els.btnSpeakBlank && speechSupported) {
+        els.btnSpeakBlank.classList.remove("hidden");
       }
+      els.feedbackPhraseRow.classList.add("hidden");
+    } else {
+      if (els.btnSpeakBlank) els.btnSpeakBlank.classList.add("hidden");
+      els.feedbackMeaning.textContent = currentWord.meaning;
+
+      if (currentWord.phrase) {
+        if (els.feedbackHeader) els.feedbackHeader.classList.remove("is-single-row");
+        els.feedbackPhrase.innerHTML = highlightWordInPhrase(currentWord.word, currentWord.phrase);
+        els.feedbackPhraseJa.textContent = currentWord.phrase_ja || "";
+        els.feedbackPhraseRow.classList.remove("hidden");
+      } else {
+        if (els.feedbackHeader) els.feedbackHeader.classList.add("is-single-row");
+        els.feedbackPhraseRow.classList.add("hidden");
+      }
+    }
+
+    // 回答後の音声再生：Track 5（穴埋めモード）のときのみ、完成した英文を1回自動再生
+    // 通常の単語クイズでは出題時に1回読み上げ済みのため、回答時は読み上げない
+    if (state.autoSpeak && isBlankMode && currentWord.phrase) {
+      speakEnglish(currentWord.phrase);
     }
 
     const delayMs = isBlankMode ? (isCorrect ? 1500 : 2500) : (isCorrect ? 900 : 1800);
@@ -2009,19 +2009,6 @@
       updateFormatSelectorForDeck();
     });
 
-    // 出題形式ボタン（単語4択 / 例文穴埋め）
-    if (els.formatBtns) {
-      els.formatBtns.forEach(btn => {
-        btn.addEventListener("click", () => {
-          if (btn.disabled) return;
-          state.selectedFormat = btn.getAttribute("data-format");
-          saveSettings({ selectedFormat: state.selectedFormat });
-          els.formatBtns.forEach(b => b.classList.toggle("active", b === btn));
-          els.homeError.classList.add("hidden");
-        });
-      });
-    }
-
     // モード選択
     els.modeBtns.forEach(btn => {
       btn.addEventListener("click", () => {
@@ -2074,6 +2061,19 @@
         }
       }
     });
+
+    if (els.btnSpeakBlank) {
+      els.btnSpeakBlank.addEventListener("click", () => {
+        const currentWord = state.questions[state.currentIndex];
+        if (currentWord && currentWord.phrase) {
+          speakEnglish(currentWord.phrase);
+          if (state.answered) {
+            clearAutoNextTimer();
+            state.autoNextTimer = setTimeout(() => goNextQuestion(), 2200);
+          }
+        }
+      });
+    }
 
     els.choiceBtns.forEach((btn, idx) => {
       btn.addEventListener("click", () => handleAnswer(idx));
