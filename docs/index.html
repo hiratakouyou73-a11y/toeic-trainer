@@ -9,7 +9,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="stylesheet" href="style.css?v=7.1">
+  <link rel="stylesheet" href="style.css?v=8.0_part1">
 </head>
 <body>
   <div class="app-container">
@@ -65,6 +65,21 @@
           <select id="deck-select" class="deck-select" aria-label="使用教材の選択">
             <option value="sample">基礎サンプル（30語）</option>
           </select>
+        </div>
+
+        <div class="setting-block" id="format-setting-block">
+          <span class="setting-label">出題形式</span>
+          <div class="format-selector" role="group" aria-label="出題形式の選択">
+            <button type="button" class="format-btn active" data-format="standard">
+              <span class="format-title">単語4択</span>
+              <span class="format-desc">英単語 → 意味</span>
+            </button>
+            <button type="button" class="format-btn" data-format="blank">
+              <span class="format-title">Part 1 例文穴埋め</span>
+              <span class="format-desc">和訳+空欄 → 英単語</span>
+            </button>
+          </div>
+          <p id="format-hint-text" class="format-hint-text"></p>
         </div>
 
         <div class="setting-block">
@@ -410,6 +425,6 @@
   </div>
 
   <script src="data/sample_words.js?v=7.1"></script>
-  <script src="app.js?v=7.1"></script>
+  <script src="app.js?v=8.0_part1"></script>
 </body>
 </html>
